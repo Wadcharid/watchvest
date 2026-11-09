@@ -306,12 +306,12 @@ async function fetchActiveListMarketData(forceRefresh = false) {
   setRefreshLoading(true);
 
   const symbolsParam = list.symbols.join(',');
-  const cacheBuster = forceRefresh ? `&_t=${Date.now()}` : '';
+  const cacheBuster = `&_t=${Date.now()}`;
 
   try {
     // 1. Try Cloudflare Pages Function endpoint
     const edgeUrl = getApiEndpoint(`/api/quote?symbols=${encodeURIComponent(symbolsParam)}${cacheBuster}`);
-    const res = await fetch(edgeUrl, { cache: forceRefresh ? 'no-store' : 'default' });
+    const res = await fetch(edgeUrl, { cache: 'no-store' });
 
     if (res.ok) {
       const data = await res.json();

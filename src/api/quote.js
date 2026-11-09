@@ -40,9 +40,9 @@ const BASELINE_DIV_YIELD_MAP = {
 };
 
 // Helper to format Thai date and time
-function getThaiDateTimeStr() {
-  const now = new Date();
-  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+function getThaiDateTimeStr(dateInput = new Date()) {
+  const dObj = typeof dateInput === 'number' ? new Date(dateInput * 1000) : (dateInput instanceof Date ? dateInput : new Date());
+  const utc = dObj.getTime() + (dObj.getTimezoneOffset() * 60000);
   const thaiDate = new Date(utc + (3600000 * 7));
 
   const thaiMonths = [
@@ -161,21 +161,26 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
 
     const price = meta.regularMarketPrice ?? null;
 
-    // Accurate 24h Change Percent: StockAnalysis official % change or Yahoo Finance market feed
+    // Accurate 24h Change Percent: Priority to Yahoo Finance live market feed
     let changePct = null;
-    if (saHtml) {
-      const chgMatch = saHtml.match(/data-test="quote-change-percent"[^>]*>([+-]?[0-9\.,]+)%?/i) ||
-                       saHtml.match(/\(([+-]?[0-9\.,]+)%\)/);
+    if (typeof meta.regularMarketChangePercent === 'number' && !isNaN(meta.regularMarketChangePercent)) {
+      changePct = Math.round(meta.regularMarketChangePercent * 100) / 100;
+    } else if (price !== null && typeof (meta.chartPreviousClose || meta.previousClose) === 'number') {
+      const prev = meta.chartPreviousClose || meta.previousClose;
+      if (prev > 0) {
+        changePct = Math.round(((price - prev) / prev) * 10000) / 100;
+      }
+    }
+
+    // Only fallback to StockAnalysis HTML if market feed had no change percent
+    if (changePct === null && saHtml) {
+      const chgMatch = saHtml.match(/data-test="quote-change-percent"[^>]*>([+-]?[0-9\.,]+)%?/i);
       if (chgMatch && chgMatch[1]) {
         const parsed = parseFloat(chgMatch[1].replace(/,/g, ''));
         if (!isNaN(parsed)) {
           changePct = parsed;
         }
       }
-    }
-
-    if (changePct === null && typeof meta.regularMarketChangePercent === 'number' && !isNaN(meta.regularMarketChangePercent)) {
-      changePct = Math.round(meta.regularMarketChangePercent * 100) / 100;
     }
 
     // Extract valid timestamp-close pairs
@@ -281,6 +286,8 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
       volume: meta.regularMarketVolume ?? null,
       high_52w: meta.fiftyTwoWeekHigh ?? null,
       low_52w: meta.fiftyTwoWeekLow ?? null,
+      market_time: meta.regularMarketTime ? getThaiDateTimeStr(meta.regularMarketTime) : null,
+      market_time_unix: meta.regularMarketTime ?? null,
       stockanalysis_url: saUrl,
       last_updated: getThaiDateTimeStr()
     };
@@ -340,7 +347,7 @@ export async function handleQuote(request) {
       'Content-Type': 'application/json; charset=utf-8',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Cache-Control': 'public, max-age=60'
+      'Cache-Control': 'public, max-age=10, s-maxage=10'
     }
   });
 }

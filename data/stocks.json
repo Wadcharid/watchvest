@@ -1,6 +1,6 @@
 {
-  "last_updated": "9 พ.ย. 2569 เวลา 07:56:15 น.",
-  "last_updated_iso": "2026-11-09T07:56:15.161116+07:00",
+  "last_updated": "9 พ.ย. 2569 เวลา 10:44:12 น.",
+  "last_updated_iso": "2026-11-09T10:44:12.632274+07:00",
   "total_assets": 16,
   "assets": [
     {
@@ -16,7 +16,7 @@
       "rsi_weekly": 39.57,
       "rsi_monthly": 55.44,
       "stockanalysis_url": "https://stockanalysis.com/stocks/nvda/",
-      "last_updated": "9 พ.ย. 2569 เวลา 07:55:57 น."
+      "last_updated": "9 พ.ย. 2569 เวลา 10:43:56 น."
     },
     {
       "symbol": "MSFT",
@@ -31,7 +31,7 @@
       "rsi_weekly": 64.85,
       "rsi_monthly": 60.81,
       "stockanalysis_url": "https://stockanalysis.com/stocks/msft/",
-      "last_updated": "9 พ.ย. 2569 เวลา 07:55:59 น."
+      "last_updated": "9 พ.ย. 2569 เวลา 10:43:57 น."
     },
     {
       "symbol": "GOOGL",
@@ -46,7 +46,7 @@
       "rsi_weekly": 34.99,
       "rsi_monthly": 52.6,
       "stockanalysis_url": "https://stockanalysis.com/stocks/googl/",
-      "last_updated": "9 พ.ย. 2569 เวลา 07:56:00 น."
+      "last_updated": "9 พ.ย. 2569 เวลา 10:43:58 น."
     },
     {
       "symbol": "AMZN",
@@ -61,7 +61,7 @@
       "rsi_weekly": 53.97,
       "rsi_monthly": 57.93,
       "stockanalysis_url": "https://stockanalysis.com/stocks/amzn/",
-      "last_updated": "9 พ.ย. 2569 เวลา 07:56:01 น."
+      "last_updated": "9 พ.ย. 2569 เวลา 10:43:59 น."
     },
     {
       "symbol": "SCHD",
@@ -76,22 +76,22 @@
       "rsi_weekly": 63.7,
       "rsi_monthly": 65.28,
       "stockanalysis_url": "https://stockanalysis.com/etf/schd/",
-      "last_updated": "9 พ.ย. 2569 เวลา 07:56:02 น."
+      "last_updated": "9 พ.ย. 2569 เวลา 10:44:00 น."
     },
     {
       "symbol": "BTC-USD",
       "name": "Bitcoin USD",
       "type": "CRYPTOCURRENCY",
       "currency": "USD",
-      "price": 75072.98,
-      "change_pct": -0.83,
+      "price": 75016.28,
+      "change_pct": -1.04,
       "pe": null,
       "dividend_yield": null,
-      "rsi_daily": 36.48,
-      "rsi_weekly": 48.2,
-      "rsi_monthly": 49.11,
+      "rsi_daily": 36.35,
+      "rsi_weekly": 48.13,
+      "rsi_monthly": 49.08,
       "stockanalysis_url": "https://stockanalysis.com/?s=BTC",
-      "last_updated": "9 พ.ย. 2569 เวลา 07:56:03 น."
+      "last_updated": "9 พ.ย. 2569 เวลา 10:44:01 น."
     },
     {
       "symbol": "TSM",
@@ -106,7 +106,7 @@
       "rsi_weekly": 40.56,
       "rsi_monthly": 58.08,
       "stockanalysis_url": "https://stockanalysis.com/stocks/tsm/",
-      "last_updated": "9 พ.ย. 2569 เวลา 07:56:04 น."
+      "last_updated": "9 พ.ย. 2569 เวลา 10:44:02 น."
     },
     {
       "symbol": "SPYI",
@@ -121,7 +121,7 @@
       "rsi_weekly": 39.1,
       "rsi_monthly": 44.42,
       "stockanalysis_url": "https://stockanalysis.com/etf/spyi/",
-      "last_updated": "9 พ.ย. 2569 เวลา 07:56:05 น."
+      "last_updated": "9 พ.ย. 2569 เวลา 10:44:03 น."
     },
     {
       "symbol": "VYMI",
@@ -136,52 +136,52 @@
       "rsi_weekly": 48.62,
       "rsi_monthly": 66.5,
       "stockanalysis_url": "https://stockanalysis.com/etf/vymi/",
-      "last_updated": "9 พ.ย. 2569 เวลา 07:56:07 น."
+      "last_updated": "9 พ.ย. 2569 เวลา 10:44:04 น."
     },
     {
       "symbol": "BKK:CPALL",
       "name": "CPALL_CP ALL",
       "type": "EQUITY",
       "currency": "THB",
-      "price": 45.5,
-      "change_pct": -1.62,
+      "price": 46.5,
+      "change_pct": 2.21,
       "pe": 13.52,
       "dividend_yield": 3.63,
-      "rsi_daily": 63.35,
+      "rsi_daily": 69.59,
       "rsi_weekly": 50.43,
-      "rsi_monthly": 45.64,
+      "rsi_monthly": 47.06,
       "stockanalysis_url": "https://stockanalysis.com/quote/bkk/CPALL/",
-      "last_updated": "9 พ.ย. 2569 เวลา 07:56:08 น."
+      "last_updated": "9 พ.ย. 2569 เวลา 10:44:06 น."
     },
     {
       "symbol": "BKK:BDMS",
       "name": "BDMS_BANGKOK DUSIT MEDICAL",
       "type": "EQUITY",
       "currency": "THB",
-      "price": 19.9,
-      "change_pct": -1.0,
+      "price": 20.1,
+      "change_pct": 1.01,
       "pe": 20.65,
       "dividend_yield": 5.03,
-      "rsi_daily": 56.85,
+      "rsi_daily": 60.37,
       "rsi_weekly": 54.05,
-      "rsi_monthly": 44.05,
+      "rsi_monthly": 44.99,
       "stockanalysis_url": "https://stockanalysis.com/quote/bkk/BDMS/",
-      "last_updated": "9 พ.ย. 2569 เวลา 07:56:09 น."
+      "last_updated": "9 พ.ย. 2569 เวลา 10:44:07 น."
     },
     {
       "symbol": "BKK:GULF",
       "name": "GULF_GULF DEVELOPMENT",
       "type": "EQUITY",
       "currency": "THB",
-      "price": 61.25,
-      "change_pct": -2.0,
+      "price": 61.5,
+      "change_pct": 0.41,
       "pe": 19.16,
       "dividend_yield": 1.71,
-      "rsi_daily": 50.19,
+      "rsi_daily": 51.9,
       "rsi_weekly": 50.88,
-      "rsi_monthly": 43.9,
+      "rsi_monthly": 44.18,
       "stockanalysis_url": "https://stockanalysis.com/quote/bkk/GULF/",
-      "last_updated": "9 พ.ย. 2569 เวลา 07:56:10 น."
+      "last_updated": "9 พ.ย. 2569 เวลา 10:44:08 น."
     },
     {
       "symbol": "IAUI",
@@ -196,22 +196,22 @@
       "rsi_weekly": 36.42,
       "rsi_monthly": 38.59,
       "stockanalysis_url": "https://stockanalysis.com/etf/iaui/",
-      "last_updated": "9 พ.ย. 2569 เวลา 07:56:11 น."
+      "last_updated": "9 พ.ย. 2569 เวลา 10:44:09 น."
     },
     {
       "symbol": "HKG:0700",
       "name": "TENCENT",
       "type": "EQUITY",
       "currency": "HKD",
-      "price": 419.8,
-      "change_pct": -2.46,
-      "pe": 14.29,
-      "dividend_yield": 1.26,
-      "rsi_daily": 55.45,
+      "price": 420.0,
+      "change_pct": 0.05,
+      "pe": 14.4,
+      "dividend_yield": 1.25,
+      "rsi_daily": 55.54,
       "rsi_weekly": 44.31,
-      "rsi_monthly": 44.62,
+      "rsi_monthly": 44.64,
       "stockanalysis_url": "https://stockanalysis.com/quote/hkg/0700/",
-      "last_updated": "9 พ.ย. 2569 เวลา 07:56:12 น."
+      "last_updated": "9 พ.ย. 2569 เวลา 10:44:10 น."
     },
     {
       "symbol": "ACWI",
@@ -220,28 +220,28 @@
       "currency": "USD",
       "price": 152.37,
       "change_pct": -0.04,
-      "pe": 19.33,
+      "pe": 19.44,
       "dividend_yield": 1.47,
       "rsi_daily": 34.01,
       "rsi_weekly": 42.66,
       "rsi_monthly": 63.72,
       "stockanalysis_url": "https://stockanalysis.com/etf/acwi/",
-      "last_updated": "9 พ.ย. 2569 เวลา 07:56:13 น."
+      "last_updated": "9 พ.ย. 2569 เวลา 10:44:11 น."
     },
     {
       "symbol": "BKK:PTTEP",
       "name": "PTTEP_PTT EXPLORATION AND",
       "type": "EQUITY",
       "currency": "THB",
-      "price": 142.5,
-      "change_pct": 0.35,
+      "price": 143.5,
+      "change_pct": 0.7,
       "pe": 7.67,
       "dividend_yield": 6.14,
-      "rsi_daily": 35.32,
+      "rsi_daily": 37.01,
       "rsi_weekly": 46.36,
-      "rsi_monthly": 52.07,
+      "rsi_monthly": 52.43,
       "stockanalysis_url": "https://stockanalysis.com/quote/bkk/PTTEP/",
-      "last_updated": "9 พ.ย. 2569 เวลา 07:56:15 น."
+      "last_updated": "9 พ.ย. 2569 เวลา 10:44:12 น."
     }
   ]
 }

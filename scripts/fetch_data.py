@@ -237,7 +237,7 @@ def fetch_symbol_data(raw_symbol: str) -> dict:
 
     stockanalysis_url = direct_sa_url if direct_sa_url else get_stockanalysis_url(display_symbol, quote_type)
 
-    # Scrape StockAnalysis real-time P/E and %change for 100% parity with stockanalysis.com
+    # Scrape StockAnalysis real-time P/E and dividend yield
     if quote_type != "CRYPTOCURRENCY" and stockanalysis_url:
         try:
             import urllib.request, re
@@ -247,9 +247,11 @@ def fetch_symbol_data(raw_symbol: str) -> dict:
                 m_pe = re.search(r'PE Ratio(?: \([^)]+\))?</td>\s*<td[^>]*>([0-9\.]+)', html_sa, re.I)
                 if m_pe:
                     pe = float(m_pe.group(1))
-                m_chg = re.search(r'data-test="quote-change-percent"[^>]*>([+-]?[0-9\.,]+)%?', html_sa) or re.search(r'\(([+-]?[0-9\.,]+)%\)', html_sa)
-                if m_chg:
-                    change_val = float(m_chg.group(1).replace(',', ''))
+                # Only use StockAnalysis % change as a fallback if market change was missing
+                if (change_val is None or change_val == 0.0):
+                    m_chg = re.search(r'data-test="quote-change-percent"[^>]*>([+-]?[0-9\.,]+)%?', html_sa)
+                    if m_chg:
+                        change_val = float(m_chg.group(1).replace(',', ''))
                 # Scrape official Dividend Yield
                 m_div = re.search(r'<td[^>]*>(?:<!--\[-?\d+-->)?(?:<a[^>]*>)?Dividend(?:</a>)?(?:<!--\]-->)?</td>\s*<td[^>]*>(?:<!--\[-?\d+-->)?([^<]+)', html_sa, re.I)
                 if m_div:
