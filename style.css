@@ -724,6 +724,54 @@ html.light .theme-moon { display: block; }
   color: var(--accent);
 }
 
+.th-symbol-name {
+  user-select: none;
+  cursor: pointer;
+}
+
+.sort-sub-btn {
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+  display: inline-flex;
+  align-items: center;
+}
+
+.sort-sub-btn:hover {
+  color: var(--text-main);
+  background: var(--bg-hover);
+}
+
+.sort-sub-btn.sort-asc {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.sort-sub-btn.sort-asc::after {
+  content: ' ▲';
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.sort-sub-btn.sort-desc {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.sort-sub-btn.sort-desc::after {
+  content: ' ▼';
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.sort-sep {
+  color: var(--text-muted);
+  margin: 0 1px;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
 .stockanalysis-table th.text-right,
 .stockanalysis-table td.text-right {
   text-align: right;

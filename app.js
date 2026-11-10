@@ -486,11 +486,26 @@ function renderTableHeader() {
     return `<th class="${sortCls} ${alignCls}" onclick="handleSort('${colKey}')">${label}</th>`;
   };
 
+  const makeSymbolHeader = () => {
+    const isSymSorted = currentSort.column === 'symbol';
+    const isNameSorted = currentSort.column === 'name';
+    const symSortCls = isSymSorted ? (currentSort.order === 'asc' ? 'sort-asc' : 'sort-desc') : '';
+    const nameSortCls = isNameSorted ? (currentSort.order === 'asc' ? 'sort-asc' : 'sort-desc') : '';
+
+    return `
+      <th class="th-symbol-name" onclick="handleSymbolHeaderClick(event)">
+        <span class="sort-sub-btn ${symSortCls}" onclick="event.stopPropagation(); handleSort('symbol');" title="กดเพื่อเรียงตาม Symbol (ตัวย่อหุ้น A-Z / Z-A)">Symbol</span>
+        <span class="sort-sep">/</span>
+        <span class="sort-sub-btn ${nameSortCls}" onclick="event.stopPropagation(); handleSort('name');" title="กดเพื่อเรียงตามชื่อสินทรัพย์ (Company / Asset Name A-Z / Z-A)">ชื่อสินทรัพย์</span>
+      </th>
+    `;
+  };
+
   if (activeView === 'overview') {
     thHtml = `
       <tr>
         <th style="width: 40px;" class="text-center">#</th>
-        ${makeTh('symbol', 'Symbol / สินทรัพย์')}
+        ${makeSymbolHeader()}
         ${makeTh('price', 'ราคาล่าสุด', 'right')}
         ${makeTh('market_cap', 'Market Cap', 'right')}
         ${makeTh('change_pct', '% เปลี่ยนแปลง', 'right')}
@@ -505,7 +520,7 @@ function renderTableHeader() {
     thHtml = `
       <tr>
         <th style="width: 40px;" class="text-center">#</th>
-        ${makeTh('symbol', 'Symbol / สินทรัพย์')}
+        ${makeSymbolHeader()}
         ${makeTh('price', 'ราคาล่าสุด', 'right')}
         ${makeTh('change_pct', '% เปลี่ยนแปลง', 'right')}
         ${makeTh('rsi_daily', 'Daily RSI (14)', 'center')}
@@ -519,7 +534,7 @@ function renderTableHeader() {
     thHtml = `
       <tr>
         <th style="width: 40px;" class="text-center">#</th>
-        ${makeTh('symbol', 'Symbol / สินทรัพย์')}
+        ${makeSymbolHeader()}
         ${makeTh('price', 'ราคาล่าสุด', 'right')}
         ${makeTh('change_pct', '% เปลี่ยนแปลง', 'right')}
         ${makeTh('dividend_yield', 'Dividend Yield (TTM)', 'right')}
@@ -532,7 +547,7 @@ function renderTableHeader() {
     thHtml = `
       <tr>
         <th style="width: 40px;" class="text-center">#</th>
-        ${makeTh('symbol', 'Symbol / สินทรัพย์')}
+        ${makeSymbolHeader()}
         ${makeTh('price', 'ราคาล่าสุด', 'right')}
         ${makeTh('market_cap', 'Market Cap', 'right')}
         ${makeTh('change_pct', '% เปลี่ยนแปลง', 'right')}
@@ -785,6 +800,19 @@ function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function parseMarketCapValue(val) {
+  if (val === null || val === undefined || val === '') return null;
+  if (typeof val === 'number') return val;
+  const str = String(val).trim().toUpperCase();
+  const num = parseFloat(str.replace(/[^0-9.-]/g, ''));
+  if (isNaN(num)) return null;
+  if (str.endsWith('T')) return num * 1e12;
+  if (str.endsWith('B')) return num * 1e9;
+  if (str.endsWith('M')) return num * 1e6;
+  if (str.endsWith('K')) return num * 1e3;
+  return num;
+}
+
 /* ==========================================================================
    Sorting Logic
    ========================================================================== */
@@ -799,13 +827,22 @@ function handleSort(column) {
 }
 window.handleSort = handleSort;
 
+function handleSymbolHeaderClick(event) {
+  // If user clicks the th cell generally, toggle name or switch to name
+  if (currentSort.column === 'name') {
+    handleSort('name');
+  } else {
+    handleSort('name');
+  }
+}
+window.handleSymbolHeaderClick = handleSymbolHeaderClick;
+
 function sortItems(items) {
   const { column, order } = currentSort;
   const mult = order === 'asc' ? 1 : -1;
 
   items.sort((a, b) => {
-    let valA = a[column];
-    let valB = b[column];
+    let valA, valB;
 
     if (column === 'high_52w') {
       valA = calculate52wHighPct(a);
@@ -813,13 +850,29 @@ function sortItems(items) {
     } else if (column === 'low_52w') {
       valA = calculate52wLowPct(a);
       valB = calculate52wLowPct(b);
+    } else if (column === 'market_cap') {
+      valA = parseMarketCapValue(a.market_cap);
+      valB = parseMarketCapValue(b.market_cap);
+    } else if (column === 'name') {
+      valA = a.name || a.symbol || '';
+      valB = b.name || b.symbol || '';
+    } else if (column === 'symbol') {
+      valA = (a.symbol || '').replace(/^(BKK:|HKG:)/i, '');
+      valB = (b.symbol || '').replace(/^(BKK:|HKG:)/i, '');
+    } else {
+      valA = a[column];
+      valB = b[column];
     }
 
-    if (valA === null || valA === undefined || isNaN(valA)) return 1;
-    if (valB === null || valB === undefined || isNaN(valB)) return -1;
+    const isValAEmpty = valA === null || valA === undefined || (typeof valA === 'number' && isNaN(valA)) || valA === '';
+    const isValBEmpty = valB === null || valB === undefined || (typeof valB === 'number' && isNaN(valB)) || valB === '';
+
+    if (isValAEmpty && isValBEmpty) return 0;
+    if (isValAEmpty) return 1;
+    if (isValBEmpty) return -1;
 
     if (typeof valA === 'string') {
-      return valA.localeCompare(valB) * mult;
+      return valA.localeCompare(String(valB), 'th', { sensitivity: 'base', numeric: true }) * mult;
     }
     return (valA - valB) * mult;
   });
