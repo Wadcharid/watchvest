@@ -204,6 +204,17 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
     }
 
     // 1. Daily RSI (14)
+    // Always include the current/active market session price into validPairs!
+    // Yahoo Finance v8 chart sets rawCloses[last] = null during market hours and pre/post market.
+    if (price !== null && typeof price === 'number' && !isNaN(price)) {
+      const lastT = timestamps.length > 0 ? timestamps[timestamps.length - 1] : (meta.regularMarketTime || Math.floor(Date.now() / 1000));
+      if (validPairs.length === 0 || validPairs[validPairs.length - 1].t < lastT) {
+        validPairs.push({ t: lastT, c: price });
+      } else if (validPairs.length > 0 && timestamps.length > 0 && validPairs[validPairs.length - 1].t === lastT) {
+        validPairs[validPairs.length - 1].c = price;
+      }
+    }
+
     const dailyCloses = validPairs.map(p => p.c);
     const rsiDaily = calculateWilderRSI(dailyCloses, 14);
 
@@ -271,6 +282,16 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
       }
     }
 
+    // Market Cap extraction from StockAnalysis HTML
+    let marketCap = null;
+    if (saHtml) {
+      const mcMatch = saHtml.match(/marketCap:"?([0-9\.]+[TBMK]?)"?/i) ||
+                      saHtml.match(/Market Cap(?: \([^)]+\))?<\/td>\s*<td[^>]*>([0-9\.]+[TBMK]?)/i);
+      if (mcMatch && mcMatch[1]) {
+        marketCap = mcMatch[1].trim();
+      }
+    }
+
     return {
       symbol: displaySymbol,
       name: meta.shortName || meta.longName || displaySymbol,
@@ -278,6 +299,7 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
       currency: meta.currency || 'USD',
       price: price,
       change_pct: changePct,
+      market_cap: marketCap,
       pe: pe,
       dividend_yield: dividendYield,
       rsi_daily: rsiDaily,
@@ -300,6 +322,7 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
       currency: 'USD',
       price: null,
       change_pct: null,
+      market_cap: null,
       pe: BASELINE_PE_MAP[displaySymbol] ?? null,
       dividend_yield: null,
       rsi_daily: null,

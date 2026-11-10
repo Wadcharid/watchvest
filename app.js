@@ -131,6 +131,9 @@ async function loadBaselineData() {
           if ((asset.dividend_yield === null || asset.dividend_yield === undefined) && existing && existing.dividend_yield !== null) {
             asset.dividend_yield = existing.dividend_yield;
           }
+          if (!asset.market_cap && existing && existing.market_cap) {
+            asset.market_cap = existing.market_cap;
+          }
           marketDataMap.set(asset.symbol, asset);
         });
         if (data.last_updated) {
@@ -321,6 +324,7 @@ async function fetchActiveListMarketData(forceRefresh = false) {
           const merged = {
             ...prev,
             ...asset,
+            market_cap: asset.market_cap || prev.market_cap || null,
             pe: (asset.pe !== null && asset.pe !== undefined) ? asset.pe : (prev.pe ?? null),
             dividend_yield: (asset.dividend_yield !== null && asset.dividend_yield !== undefined) ? asset.dividend_yield : (prev.dividend_yield ?? null),
             rsi_daily: (asset.rsi_daily !== null && asset.rsi_daily !== undefined) ? asset.rsi_daily : (prev.rsi_daily ?? null),
@@ -478,6 +482,7 @@ function renderTableHeader() {
         <th style="width: 40px;" class="text-center">#</th>
         ${makeTh('symbol', 'Symbol / สินทรัพย์')}
         ${makeTh('price', 'ราคาล่าสุด', 'right')}
+        ${makeTh('market_cap', 'Market Cap', 'right')}
         ${makeTh('change_pct', '% เปลี่ยนแปลง', 'right')}
         ${makeTh('pe', 'P/E Ratio', 'right')}
         ${makeTh('dividend_yield', 'Dividend Yield', 'right')}
@@ -519,6 +524,7 @@ function renderTableHeader() {
         <th style="width: 40px;" class="text-center">#</th>
         ${makeTh('symbol', 'Symbol / สินทรัพย์')}
         ${makeTh('price', 'ราคาล่าสุด', 'right')}
+        ${makeTh('market_cap', 'Market Cap', 'right')}
         ${makeTh('change_pct', '% เปลี่ยนแปลง', 'right')}
         ${makeTh('pe', 'P/E', 'right')}
         ${makeTh('dividend_yield', 'Div Yield', 'right')}
@@ -564,6 +570,7 @@ function renderTableBody(items) {
           <td class="text-center mono" style="color: var(--text-muted); font-size: 11px;">${idx + 1}</td>
           <td>${symHtml}</td>
           <td class="text-right">${priceHtml}</td>
+          <td class="text-right mono" style="font-weight: 500;">${formatMarketCap(asset.market_cap)}</td>
           <td class="text-right">${changeHtml}</td>
           <td class="text-right mono">${formatVal(asset.pe)}</td>
           <td class="text-right mono">${formatPercent(asset.dividend_yield)}</td>
@@ -606,6 +613,7 @@ function renderTableBody(items) {
           <td class="text-center mono" style="color: var(--text-muted); font-size: 11px;">${idx + 1}</td>
           <td>${symHtml}</td>
           <td class="text-right">${priceHtml}</td>
+          <td class="text-right mono" style="font-weight: 500;">${formatMarketCap(asset.market_cap)}</td>
           <td class="text-right">${changeHtml}</td>
           <td class="text-right mono">${formatVal(asset.pe)}</td>
           <td class="text-right mono">${formatPercent(asset.dividend_yield)}</td>
@@ -679,6 +687,17 @@ function formatVolume(val) {
   if (val >= 1e6) return (val / 1e6).toFixed(2) + 'M';
   if (val >= 1e3) return (val / 1e3).toFixed(1) + 'K';
   return val.toLocaleString();
+}
+
+function formatMarketCap(val) {
+  if (val === null || val === undefined || val === '') return '-';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'number') {
+    if (val >= 1e12) return (val / 1e12).toFixed(2) + 'T';
+    if (val >= 1e9) return (val / 1e9).toFixed(2) + 'B';
+    if (val >= 1e6) return (val / 1e6).toFixed(2) + 'M';
+  }
+  return String(val);
 }
 
 function getBadgeClass(type) {

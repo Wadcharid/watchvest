@@ -173,13 +173,18 @@ def fetch_symbol_data(raw_symbol: str) -> dict:
     rsi_daily = None
     rsi_weekly = None
     rsi_monthly = None
+
+    price_val = round(float(price), 2) if price is not None and not pd.isna(price) else None
     
     try:
         df_daily = ticker.history(period="2y", interval="1d", auto_adjust=False)
         if not df_daily.empty and "Close" in df_daily:
+            if price_val is not None and pd.isna(df_daily["Close"].iloc[-1]):
+                df_daily.loc[df_daily.index[-1], "Close"] = price_val
             rsi_daily = calculate_rsi(df_daily["Close"])
             if price is None:
                 price = round(float(df_daily["Close"].iloc[-1]), 2)
+                price_val = price
             if change_pct is None and len(df_daily) >= 2:
                 prev_c = float(df_daily["Close"].iloc[-2])
                 curr_c = float(df_daily["Close"].iloc[-1])
@@ -190,6 +195,8 @@ def fetch_symbol_data(raw_symbol: str) -> dict:
     try:
         df_weekly = ticker.history(period="5y", interval="1wk", auto_adjust=False)
         if not df_weekly.empty and "Close" in df_weekly:
+            if price_val is not None and pd.isna(df_weekly["Close"].iloc[-1]):
+                df_weekly.loc[df_weekly.index[-1], "Close"] = price_val
             rsi_weekly = calculate_rsi(df_weekly["Close"])
     except Exception as e:
         print(f"Warning: error calculating weekly RSI for {yf_symbol}: {e}")
@@ -197,12 +204,15 @@ def fetch_symbol_data(raw_symbol: str) -> dict:
     try:
         df_monthly = ticker.history(period="max", interval="1mo", auto_adjust=False)
         if not df_monthly.empty and "Close" in df_monthly:
+            if price_val is not None and pd.isna(df_monthly["Close"].iloc[-1]):
+                df_monthly.loc[df_monthly.index[-1], "Close"] = price_val
             rsi_monthly = calculate_rsi(df_monthly["Close"])
     except Exception as e:
         print(f"Warning: error calculating monthly RSI for {yf_symbol}: {e}")
 
     # Standardize values
-    price_val = round(float(price), 2) if price is not None and not pd.isna(price) else None
+    if price_val is None and price is not None and not pd.isna(price):
+        price_val = round(float(price), 2)
     change_val = round(float(change_pct), 2) if change_pct is not None and not pd.isna(change_pct) else 0.0
 
     # Fallback to direct Yahoo Finance v8 chart if yfinance timed out
@@ -235,6 +245,21 @@ def fetch_symbol_data(raw_symbol: str) -> dict:
     # Dividend Yield (%)
     div_yield = calculate_best_dividend_yield(ticker, info, price_val, quote_type, display_symbol)
 
+    # Market Cap (e.g. 4.31T, 3.53T)
+    market_cap_str = None
+    mc_raw = info.get("marketCap")
+    if mc_raw is not None:
+        try:
+            mc_val = float(mc_raw)
+            if mc_val >= 1e12:
+                market_cap_str = f"{mc_val / 1e12:.2f}T"
+            elif mc_val >= 1e9:
+                market_cap_str = f"{mc_val / 1e9:.2f}B"
+            elif mc_val >= 1e6:
+                market_cap_str = f"{mc_val / 1e6:.2f}M"
+        except Exception:
+            pass
+
     stockanalysis_url = direct_sa_url if direct_sa_url else get_stockanalysis_url(display_symbol, quote_type)
 
     # Scrape StockAnalysis real-time P/E and dividend yield
@@ -244,6 +269,10 @@ def fetch_symbol_data(raw_symbol: str) -> dict:
             req_sa = urllib.request.Request(stockanalysis_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
             with urllib.request.urlopen(req_sa, timeout=6) as r_sa:
                 html_sa = r_sa.read().decode('utf-8')
+                if not market_cap_str:
+                    m_mc = re.search(r'marketCap:"?([0-9\.]+[TBMK]?)"?', html_sa) or re.search(r'Market Cap</td>\s*<td[^>]*>([0-9\.]+[TBMK]?)', html_sa, re.I)
+                    if m_mc:
+                        market_cap_str = m_mc.group(1).strip()
                 m_pe = re.search(r'PE Ratio(?: \([^)]+\))?</td>\s*<td[^>]*>([0-9\.]+)', html_sa, re.I)
                 if m_pe:
                     pe = float(m_pe.group(1))
@@ -274,6 +303,7 @@ def fetch_symbol_data(raw_symbol: str) -> dict:
         "currency": currency,
         "price": price_val,
         "change_pct": change_val,
+        "market_cap": market_cap_str,
         "pe": pe,
         "dividend_yield": div_yield,
         "rsi_daily": rsi_daily,
