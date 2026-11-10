@@ -1,6 +1,7 @@
 /**
  * Watchvest Quote API Handler
- * High-performance single-request multi-timeframe indicator engine
+ * High-performance real-time indicator engine powered by TradingView Scanner API
+ * with automatic fallback to Yahoo Finance v8 chart + StockAnalysis HTML
  */
 
 const BASELINE_PE_MAP = {
@@ -39,6 +40,50 @@ const BASELINE_DIV_YIELD_MAP = {
   'BKK:PTTEP': 6.10
 };
 
+const TV_KNOWN_TICKERS = {
+  'SCHD': ['america', ['AMEX:SCHD']],
+  'SPYI': ['america', ['CBOE:SPYI']],
+  'IAUI': ['america', ['CBOE:IAUI']],
+  'TSM': ['america', ['NYSE:TSM']],
+  'NVDA': ['america', ['NASDAQ:NVDA']],
+  'MSFT': ['america', ['NASDAQ:MSFT']],
+  'GOOGL': ['america', ['NASDAQ:GOOGL']],
+  'GOOG': ['america', ['NASDAQ:GOOG']],
+  'AMZN': ['america', ['NASDAQ:AMZN']],
+  'VYMI': ['america', ['NASDAQ:VYMI']],
+  'ACWI': ['america', ['NASDAQ:ACWI']],
+  'QQQ': ['america', ['NASDAQ:QQQ']],
+  'SPY': ['america', ['AMEX:SPY']],
+  'VOO': ['america', ['AMEX:VOO']],
+  'VTI': ['america', ['AMEX:VTI']],
+  'JEPI': ['america', ['AMEX:JEPI']],
+  'JEPQ': ['america', ['NASDAQ:JEPQ']],
+  'TLT': ['america', ['NASDAQ:TLT']],
+  'NVDL': ['america', ['NASDAQ:NVDL']],
+  'BTC-USD': ['crypto', ['BINANCE:BTCUSDT', 'COINBASE:BTCUSD']],
+  'BTC': ['crypto', ['BINANCE:BTCUSDT', 'COINBASE:BTCUSD']],
+  'ETH-USD': ['crypto', ['BINANCE:ETHUSDT']],
+  'ETH': ['crypto', ['BINANCE:ETHUSDT']]
+};
+
+const TV_COLUMNS = [
+  'close',                // 0
+  'change',               // 1
+  'volume',               // 2
+  'RSI',                  // 3
+  'RSI|1W',               // 4
+  'RSI|1M',               // 5
+  'price_earnings_ttm',   // 6
+  'dividends_yield',      // 7
+  'price_52_week_high',   // 8
+  'price_52_week_low',    // 9
+  'market_cap_basic',     // 10
+  'description',          // 11
+  'currency',             // 12
+  'type',                 // 13
+  'update_time'           // 14
+];
+
 // Helper to format Thai date and time
 function getThaiDateTimeStr(dateInput = new Date()) {
   const dObj = typeof dateInput === 'number' ? new Date(dateInput * 1000) : (dateInput instanceof Date ? dateInput : new Date());
@@ -60,7 +105,29 @@ function getThaiDateTimeStr(dateInput = new Date()) {
   return `${d} ${m} ${y} เวลา ${hours}:${mins}:${secs} น.`;
 }
 
-// Calculate Wilder's 14-period smoothed RSI (TradingView / StockAnalysis standard)
+function formatMarketCap(val) {
+  if (val === null || val === undefined || isNaN(val)) return null;
+  const num = Number(val);
+  if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
+  if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+  if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+  return String(Math.round(num * 100) / 100);
+}
+
+function mapTvType(tvType, symbol) {
+  if (symbol.startsWith('BTC') || symbol.startsWith('ETH') || symbol.includes('-USD')) {
+    return 'CRYPTOCURRENCY';
+  }
+  if (tvType === 'fund') return 'ETF';
+  if (tvType === 'stock' || tvType === 'dr') return 'EQUITY';
+  if (tvType === 'spot') return 'CRYPTOCURRENCY';
+  if (['SPY', 'SCHD', 'VYMI', 'IAUI', 'ACWI', 'QQQ', 'VOO', 'VTI'].some(e => symbol.includes(e))) {
+    return 'ETF';
+  }
+  return 'EQUITY';
+}
+
+// Calculate Wilder's 14-period smoothed RSI (for fallback)
 function calculateWilderRSI(closes, period = 14) {
   if (!closes || closes.length <= period) return null;
   const valid = closes.filter(c => typeof c === 'number' && !isNaN(c));
@@ -128,6 +195,146 @@ function resolveSymbol(raw) {
   return { yfTicker, displaySymbol, saUrl, assetType };
 }
 
+/**
+ * Fetch live data from TradingView Scanner API in parallel batches.
+ * Instant zero-delay real-time tick quotes and indicators directly from SET, US exchanges, HKEX, and Crypto.
+ */
+async function fetchTradingViewBatch(symbols) {
+  const marketGroups = new Map();
+
+  for (const raw of symbols) {
+    const sym = (raw || '').trim().toUpperCase();
+    if (!sym) continue;
+
+    if (TV_KNOWN_TICKERS[sym]) {
+      const [market, tickers] = TV_KNOWN_TICKERS[sym];
+      if (!marketGroups.has(market)) marketGroups.set(market, []);
+      marketGroups.get(market).push({ sym, candidates: tickers });
+    } else if (sym.startsWith('BKK:')) {
+      const code = sym.replace('BKK:', '');
+      if (!marketGroups.has('thailand')) marketGroups.set('thailand', []);
+      marketGroups.get('thailand').push({ sym, candidates: [`SET:${code}`] });
+    } else if (sym.startsWith('HKG:')) {
+      const code = sym.replace('HKG:', '');
+      const numCode = /^\d+$/.test(code) ? String(parseInt(code, 10)) : code;
+      if (!marketGroups.has('hongkong')) marketGroups.set('hongkong', []);
+      marketGroups.get('hongkong').push({ sym, candidates: [`HKEX:${numCode}`, `HKEX:${code}`] });
+    } else if (sym.endsWith('-USD') || ['BTC', 'ETH', 'SOL', 'BNB'].includes(sym)) {
+      const clean = sym.replace('-USD', '');
+      if (!marketGroups.has('crypto')) marketGroups.set('crypto', []);
+      marketGroups.get('crypto').push({ sym, candidates: [`BINANCE:${clean}USDT`, `COINBASE:${clean}USD`] });
+    } else {
+      const clean = sym.replace('.', '');
+      const candidates = [`NASDAQ:${clean}`, `NYSE:${clean}`, `AMEX:${clean}`, `CBOE:${clean}`];
+      if (!marketGroups.has('america')) marketGroups.set('america', []);
+      marketGroups.get('america').push({ sym, candidates });
+    }
+  }
+
+  const resultsMap = new Map();
+  const fetchPromises = [];
+
+  for (const [market, items] of marketGroups.entries()) {
+    const allTickers = [];
+    for (const item of items) {
+      allTickers.push(...item.candidates);
+    }
+
+    const scanUrl = `https://scanner.tradingview.com/${market}/scan`;
+    const payload = {
+      symbols: { tickers: allTickers },
+      columns: TV_COLUMNS
+    };
+
+    const p = fetch(scanUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      },
+      body: JSON.stringify(payload)
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data || !data.data || !Array.isArray(data.data)) return;
+        const rowMap = new Map();
+        for (const row of data.data) {
+          rowMap.set(row.s, row.d);
+        }
+
+        for (const item of items) {
+          let matched = null;
+          for (const cand of item.candidates) {
+            if (rowMap.has(cand)) {
+              matched = rowMap.get(cand);
+              break;
+            }
+          }
+
+          if (matched && matched[0] !== null && matched[0] !== undefined) {
+            const sym = item.sym;
+            const { saUrl } = resolveSymbol(sym);
+
+            const closePrice = matched[0];
+            const chgPct = matched[1] !== null && !isNaN(matched[1]) ? Math.round(matched[1] * 100) / 100 : 0.0;
+            const vol = matched[2] ?? null;
+            const rsiD = matched[3] !== null && !isNaN(matched[3]) ? Math.round(matched[3] * 100) / 100 : null;
+            const rsiW = matched[4] !== null && !isNaN(matched[4]) ? Math.round(matched[4] * 100) / 100 : null;
+            const rsiM = matched[5] !== null && !isNaN(matched[5]) ? Math.round(matched[5] * 100) / 100 : null;
+
+            let peVal = matched[6] !== null && !isNaN(matched[6]) && matched[6] > 0 ? Math.round(matched[6] * 100) / 100 : (BASELINE_PE_MAP[sym] ?? null);
+
+            let divVal = matched[7] !== null && !isNaN(matched[7]) && matched[7] > 0 ? Math.round(matched[7] * 100) / 100 : (BASELINE_DIV_YIELD_MAP[sym] ?? null);
+            if (sym === 'BKK:BDMS' && BASELINE_DIV_YIELD_MAP['BKK:BDMS']) {
+              divVal = BASELINE_DIV_YIELD_MAP['BKK:BDMS'];
+            }
+
+            const high52 = matched[8] ?? null;
+            const low52 = matched[9] ?? null;
+            const mcVal = matched[10] ? formatMarketCap(matched[10]) : null;
+            const desc = matched[11] || sym;
+            const curr = matched[12] || (sym.startsWith('BKK:') ? 'THB' : (sym.startsWith('HKG:') ? 'HKD' : 'USD'));
+            const assetType = mapTvType(matched[13], sym);
+            const updateTime = matched[14] || Math.floor(Date.now() / 1000);
+
+            resultsMap.set(sym, {
+              symbol: sym,
+              name: desc,
+              type: assetType,
+              currency: curr,
+              price: closePrice,
+              change_pct: chgPct,
+              market_cap: mcVal,
+              pe: peVal,
+              dividend_yield: divVal,
+              rsi_daily: rsiD,
+              rsi_weekly: rsiW,
+              rsi_monthly: rsiM,
+              volume: vol,
+              high_52w: high52,
+              low_52w: low52,
+              market_time: getThaiDateTimeStr(updateTime),
+              market_time_unix: updateTime,
+              stockanalysis_url: saUrl,
+              last_updated: getThaiDateTimeStr()
+            });
+          }
+        }
+      })
+      .catch(err => {
+        console.warn(`TradingView scanner fetch failed for ${market}:`, err);
+      });
+
+    fetchPromises.push(p);
+  }
+
+  await Promise.allSettled(fetchPromises);
+  return resultsMap;
+}
+
+/**
+ * Fallback fetcher using Yahoo Finance chart v8 + StockAnalysis HTML
+ */
 async function fetchSingleAsset(symbol, shouldFetchSA = true) {
   const { yfTicker, displaySymbol, saUrl, assetType } = resolveSymbol(symbol);
 
@@ -139,7 +346,6 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
   try {
     const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfTicker)}?interval=1d&range=5y&events=div`;
 
-    // Concurrently fetch StockAnalysis page if enabled (symbol count <= 20) to guarantee 100% exact real-time P/E and % change
     const saFetchPromise = (shouldFetchSA && assetType !== 'CRYPTOCURRENCY' && saUrl)
       ? fetch(saUrl, { headers: { 'User-Agent': headers['User-Agent'], 'Accept': 'text/html' } })
           .then(r => r.ok ? r.text() : null)
@@ -161,7 +367,6 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
 
     const price = meta.regularMarketPrice ?? null;
 
-    // Accurate 24h Change Percent: Priority to Yahoo Finance live market feed
     let changePct = null;
     if (typeof meta.regularMarketChangePercent === 'number' && !isNaN(meta.regularMarketChangePercent)) {
       changePct = Math.round(meta.regularMarketChangePercent * 100) / 100;
@@ -172,7 +377,6 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
       }
     }
 
-    // Only fallback to StockAnalysis HTML if market feed had no change percent
     if (changePct === null && saHtml) {
       const chgMatch = saHtml.match(/data-test="quote-change-percent"[^>]*>([+-]?[0-9\.,]+)%?/i);
       if (chgMatch && chgMatch[1]) {
@@ -183,7 +387,6 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
       }
     }
 
-    // Extract valid timestamp-close pairs
     const timestamps = chartRes.timestamp || [];
     const rawCloses = quoteData.close || [];
     const validPairs = [];
@@ -195,7 +398,6 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
       }
     }
 
-    // Fallback 24h change calculation from closes if needed
     if (changePct === null && validPairs.length >= 2 && price !== null) {
       const prevClose = validPairs[validPairs.length - 2].c;
       if (prevClose && prevClose !== 0) {
@@ -203,9 +405,6 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
       }
     }
 
-    // 1. Daily RSI (14)
-    // Always include the current/active market session price into validPairs!
-    // Yahoo Finance v8 chart sets rawCloses[last] = null during market hours and pre/post market.
     if (price !== null && typeof price === 'number' && !isNaN(price)) {
       const lastT = timestamps.length > 0 ? timestamps[timestamps.length - 1] : (meta.regularMarketTime || Math.floor(Date.now() / 1000));
       if (validPairs.length === 0 || validPairs[validPairs.length - 1].t < lastT) {
@@ -218,17 +417,14 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
     const dailyCloses = validPairs.map(p => p.c);
     const rsiDaily = calculateWilderRSI(dailyCloses, 14);
 
-    // 2. Weekly RSI (14) - Resampled from last close of each week (Monday to Sunday)
     const weeklyMap = new Map();
     for (const p of validPairs) {
-      // 345600s = 4 days, aligning Unix epoch (Thu Jan 1 1970) to Monday week buckets
       const weekIdx = Math.floor((p.t + 345600) / 604800);
       weeklyMap.set(weekIdx, p.c);
     }
     const weeklyCloses = Array.from(weeklyMap.values());
     const rsiWeekly = calculateWilderRSI(weeklyCloses, 14);
 
-    // 3. Monthly RSI (14) - Resampled from last close of each calendar month
     const monthlyMap = new Map();
     for (const p of validPairs) {
       const d = new Date(p.t * 1000);
@@ -238,8 +434,6 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
     const monthlyCloses = Array.from(monthlyMap.values());
     const rsiMonthly = calculateWilderRSI(monthlyCloses, 14);
 
-    // TTM Dividend Yield calculation:
-    // 1. Try extracting exact official yield from StockAnalysis HTML
     let dividendYield = BASELINE_DIV_YIELD_MAP[displaySymbol] ?? null;
     if (saHtml) {
       const divMatch = saHtml.match(/<td[^>]*>(?:<!--\[-?\d+-->)?(?:<a[^>]*>)?Dividend(?:<\/a>)?(?:<!--\]-->)?<\/td>\s*<td[^>]*>(?:<!--\[-?\d+-->)?([^<]+)/i);
@@ -257,7 +451,6 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
       }
     }
 
-    // 2. Fallback: calculate TTM (past 365 days only) cash dividends from chart if not available
     if (dividendYield === null && assetType !== 'CRYPTOCURRENCY') {
       const events = chartRes.events || {};
       const dividends = events.dividends || {};
@@ -270,7 +463,6 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
       }
     }
 
-    // P/E Ratio: Live extraction from StockAnalysis HTML with fallback to BASELINE_PE_MAP
     let pe = BASELINE_PE_MAP[displaySymbol] ?? null;
     if (saHtml) {
       const peMatch = saHtml.match(/PE Ratio(?: \([^)]+\))?<\/td>\s*<td[^>]*>([0-9\.]+)/i);
@@ -282,7 +474,6 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
       }
     }
 
-    // Market Cap extraction from StockAnalysis HTML
     let marketCap = null;
     if (saHtml) {
       const mcMatch = saHtml.match(/marketCap:"?([0-9\.]+[TBMK]?)"?/i) ||
@@ -314,7 +505,7 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
       last_updated: getThaiDateTimeStr()
     };
   } catch (err) {
-    console.error(`Error fetching ${displaySymbol}:`, err);
+    console.error(`Error fetching fallback for ${displaySymbol}:`, err);
     return {
       symbol: displaySymbol,
       name: displaySymbol,
@@ -343,7 +534,7 @@ export async function handleQuote(request) {
 
   let symbolList = [];
   if (symbolsParam) {
-    symbolList = symbolsParam.split(',').map(s => s.trim()).filter(Boolean);
+    symbolList = symbolsParam.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
   }
 
   if (symbolList.length === 0) {
@@ -353,9 +544,35 @@ export async function handleQuote(request) {
     ];
   }
 
-  // Safe subrequest budget: only fetch SA HTML when list <= 20 symbols (max 40 subrequests < 50 limit)
-  const shouldFetchSA = symbolList.length <= 20;
-  const results = await Promise.all(symbolList.map(sym => fetchSingleAsset(sym, shouldFetchSA)));
+  // 1. Primary Feed: Instant zero-delay quotes from TradingView Scanner API
+  let tvMap = new Map();
+  try {
+    tvMap = await fetchTradingViewBatch(symbolList);
+  } catch (err) {
+    console.warn('TradingView batch fetch encountered error:', err);
+  }
+
+  // 2. Identify any symbols that TradingView scanner did not return, fetch via fallback
+  const missingSymbols = symbolList.filter(sym => !tvMap.has(sym));
+  const fallbackResultsMap = new Map();
+
+  if (missingSymbols.length > 0) {
+    const shouldFetchSA = missingSymbols.length <= 15;
+    const fallbackResults = await Promise.all(
+      missingSymbols.map(sym => fetchSingleAsset(sym, shouldFetchSA))
+    );
+    for (let i = 0; i < missingSymbols.length; i++) {
+      fallbackResultsMap.set(missingSymbols[i], fallbackResults[i]);
+    }
+  }
+
+  // 3. Assemble results in original requested order
+  const results = symbolList.map(sym => {
+    if (tvMap.has(sym)) {
+      return tvMap.get(sym);
+    }
+    return fallbackResultsMap.get(sym);
+  });
 
   const thaiNow = getThaiDateTimeStr();
   const responseData = {

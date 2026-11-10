@@ -2,9 +2,10 @@ name: Update Watchlist Market Data
 
 on:
   schedule:
-    # รันอัตโนมัติทุกๆ 3 ชั่วโมงตลอด 24 ชั่วโมง (ครอบคลุมตลาดเอเชีย สหรัฐฯ และ Crypto)
-    # เช่น เวลาไทย 10:20, 13:20, 16:20, 19:20, 22:20, 01:20, 04:20, 07:20 น.
-    - cron: '20 */3 * * *'
+    # ทุก 30 นาที ในช่วงวันทำการตลาดเอเชียและสหรัฐฯ (วันจันทร์-ศุกร์ 09:00 - 04:00 น. ตามเวลาไทย)
+    - cron: '*/30 2-21 * * 1-5'
+    # ทุก 2 ชั่วโมง ในช่วงวันหยุดสุดสัปดาห์ สำหรับตลาด Crypto (BTC)
+    - cron: '0 */2 * * 0,6'
   workflow_dispatch: # เปิดให้กดปุ่มสั่ง Run ได้ตลอดเวลา
   push:
     paths:
@@ -42,4 +43,4 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add data/stocks.json
-          git diff --staged --quiet || (git commit -m "Update stock data and RSI indicators [skip ci]" && git push)
+          git diff --staged --quiet || (git commit -m "Update stock data and RSI indicators via TradingView feed [skip ci]" && git push)
