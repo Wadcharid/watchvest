@@ -370,11 +370,8 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
     let changePct = null;
     if (typeof meta.regularMarketChangePercent === 'number' && !isNaN(meta.regularMarketChangePercent)) {
       changePct = Math.round(meta.regularMarketChangePercent * 100) / 100;
-    } else if (price !== null && typeof (meta.chartPreviousClose || meta.previousClose) === 'number') {
-      const prev = meta.chartPreviousClose || meta.previousClose;
-      if (prev > 0) {
-        changePct = Math.round(((price - prev) / prev) * 10000) / 100;
-      }
+    } else if (typeof meta.previousClose === 'number' && meta.previousClose > 0 && price !== null) {
+      changePct = Math.round(((price - meta.previousClose) / meta.previousClose) * 10000) / 100;
     }
 
     if (changePct === null && saHtml) {
@@ -544,34 +541,66 @@ export async function handleQuote(request) {
     ];
   }
 
-  // 1. Primary Feed: Instant zero-delay quotes from TradingView Scanner API
-  let tvMap = new Map();
-  try {
-    tvMap = await fetchTradingViewBatch(symbolList);
-  } catch (err) {
-    console.warn('TradingView batch fetch encountered error:', err);
-  }
+  // 1. Parallel fetch from Yahoo Finance chart v8 (real-time live prices & Wilder RSI)
+  // and TradingView Scanner batch (market cap & P/E fundamentals).
+  // Fetching Yahoo chart without StockAnalysis HTML ensures 1 lightweight subrequest per asset (< 50 Cloudflare limit).
+  const [yahooResults, tvMap] = await Promise.all([
+    Promise.allSettled(symbolList.map(sym => fetchSingleAsset(sym, false))),
+    fetchTradingViewBatch(symbolList).catch(err => {
+      console.warn('TradingView batch fetch encountered error:', err);
+      return new Map();
+    })
+  ]);
 
-  // 2. Identify any symbols that TradingView scanner did not return, fetch via fallback
-  const missingSymbols = symbolList.filter(sym => !tvMap.has(sym));
-  const fallbackResultsMap = new Map();
-
-  if (missingSymbols.length > 0) {
-    const shouldFetchSA = missingSymbols.length <= 15;
-    const fallbackResults = await Promise.all(
-      missingSymbols.map(sym => fetchSingleAsset(sym, shouldFetchSA))
-    );
-    for (let i = 0; i < missingSymbols.length; i++) {
-      fallbackResultsMap.set(missingSymbols[i], fallbackResults[i]);
+  const yahooMap = new Map();
+  symbolList.forEach((sym, idx) => {
+    const res = yahooResults[idx];
+    if (res.status === 'fulfilled' && res.value && res.value.price !== null) {
+      yahooMap.set(sym, res.value);
     }
-  }
+  });
 
-  // 3. Assemble results in original requested order
+  // 2. Intelligently merge feeds:
+  // Yahoo Finance provides zero-delay real-time tick prices, change %, 52w range, volume, and accurate Wilder RSI.
+  // TradingView Scanner enriches market cap and P/E fundamentals, or serves as seamless instant fallback.
   const results = symbolList.map(sym => {
-    if (tvMap.has(sym)) {
-      return tvMap.get(sym);
+    const yfData = yahooMap.get(sym);
+    const tvData = tvMap.get(sym);
+
+    if (yfData) {
+      return {
+        ...yfData,
+        market_cap: yfData.market_cap || tvData?.market_cap || null,
+        pe: (yfData.pe !== null && yfData.pe !== undefined) ? yfData.pe : (tvData?.pe ?? BASELINE_PE_MAP[sym] ?? null),
+        dividend_yield: (yfData.dividend_yield !== null && yfData.dividend_yield !== undefined) ? yfData.dividend_yield : (tvData?.dividend_yield ?? BASELINE_DIV_YIELD_MAP[sym] ?? null)
+      };
     }
-    return fallbackResultsMap.get(sym);
+
+    if (tvData) {
+      return tvData;
+    }
+
+    // Ultimate fallback if both feeds fail
+    const { saUrl, assetType } = resolveSymbol(sym);
+    return {
+      symbol: sym,
+      name: sym,
+      type: assetType,
+      currency: sym.startsWith('BKK:') ? 'THB' : (sym.startsWith('HKG:') ? 'HKD' : 'USD'),
+      price: null,
+      change_pct: null,
+      market_cap: null,
+      pe: BASELINE_PE_MAP[sym] ?? null,
+      dividend_yield: BASELINE_DIV_YIELD_MAP[sym] ?? null,
+      rsi_daily: null,
+      rsi_weekly: null,
+      rsi_monthly: null,
+      volume: null,
+      high_52w: null,
+      low_52w: null,
+      stockanalysis_url: saUrl,
+      last_updated: getThaiDateTimeStr()
+    };
   });
 
   const thaiNow = getThaiDateTimeStr();
@@ -587,7 +616,9 @@ export async function handleQuote(request) {
       'Content-Type': 'application/json; charset=utf-8',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Cache-Control': 'public, max-age=10, s-maxage=10'
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0'
     }
   });
 }

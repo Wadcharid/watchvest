@@ -115,6 +115,9 @@ async function initApp() {
 
   // Fetch live market data
   fetchActiveListMarketData();
+
+  // Start background auto-refresh polling engine
+  startAutoRefresh();
 }
 
 async function loadBaselineData() {
@@ -297,12 +300,35 @@ function duplicateCurrentWatchlist() {
    Data Fetching Engine (Cloudflare Edge Function + Fallback)
    ========================================================================== */
 function getApiEndpoint(path) {
-  const isCloudflareOrLocal = window.location.hostname.includes('pages.dev') ||
-    window.location.hostname.includes('workers.dev') ||
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1';
-  const base = isCloudflareOrLocal ? '' : 'https://watchvest.pages.dev';
+  const isCloudflare = window.location.hostname.includes('pages.dev') ||
+    window.location.hostname.includes('workers.dev');
+  // If running on GitHub Pages, localhost, or file://, use Cloudflare Pages Edge backend
+  const base = isCloudflare ? '' : 'https://watchvest.pages.dev';
   return `${base}${path}`;
+}
+
+let autoRefreshTimer = null;
+
+function startAutoRefresh() {
+  if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+  // Auto-refresh every 30 seconds when tab is active
+  autoRefreshTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      fetchActiveListMarketData(false);
+    }
+  }, 30000);
+
+  // Trigger immediate refresh when returning to tab
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      fetchActiveListMarketData(false);
+    }
+  });
+
+  // Also refresh when window gains focus
+  window.addEventListener('focus', () => {
+    fetchActiveListMarketData(false);
+  });
 }
 
 async function fetchActiveListMarketData(forceRefresh = false) {
@@ -312,7 +338,7 @@ async function fetchActiveListMarketData(forceRefresh = false) {
     return;
   }
 
-  setRefreshLoading(true);
+  setRefreshLoading(true, forceRefresh);
 
   const symbolsParam = list.symbols.join(',');
   const cacheBuster = `&_t=${Date.now()}`;
@@ -345,7 +371,7 @@ async function fetchActiveListMarketData(forceRefresh = false) {
           lastUpdatedBadge.textContent = data.last_updated;
         }
         renderTable();
-        setRefreshLoading(false);
+        setRefreshLoading(false, forceRefresh);
         if (forceRefresh) showToast('🎉 อัปเดตราคาและ RSI ล่าสุดเรียบร้อยแล้ว');
         return;
       }
@@ -384,15 +410,17 @@ async function fetchActiveListMarketData(forceRefresh = false) {
     }
   }
 
-  setRefreshLoading(false);
+  setRefreshLoading(false, forceRefresh);
   renderTable();
 }
 
-function setRefreshLoading(isLoading) {
+function setRefreshLoading(isLoading, isManual = false) {
   if (isLoading) {
-    btnRefresh.disabled = true;
+    if (isManual) {
+      btnRefresh.disabled = true;
+      btnRefreshLabel.textContent = 'กำลังโหลด...';
+    }
     btnRefresh.querySelector('.refresh-svg').classList.add('spin-anim');
-    btnRefreshLabel.textContent = 'กำลังโหลด...';
   } else {
     btnRefresh.disabled = false;
     btnRefresh.querySelector('.refresh-svg').classList.remove('spin-anim');

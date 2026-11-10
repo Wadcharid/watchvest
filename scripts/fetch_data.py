@@ -5,7 +5,10 @@ import re
 import urllib.request
 from datetime import datetime, timezone, timedelta
 import pandas as pd
-import yfinance as yf
+try:
+    import yfinance as yf
+except ImportError:
+    yf = None
 
 BASELINE_PE_MAP = {
     'NVDA': 22.96,
@@ -348,6 +351,8 @@ def calculate_best_dividend_yield(ticker, info: dict, price: float | None, quote
 
 def fetch_symbol_data_fallback(raw_symbol: str) -> dict:
     """Fallback fetcher using yfinance / Yahoo Finance v8 chart."""
+    if yf is None:
+        return None
     display_symbol, yf_symbol, direct_sa_url = resolve_ticker(raw_symbol)
     print(f"Fallback fetching for: {display_symbol} (yfinance: {yf_symbol})...")
     ticker = yf.Ticker(yf_symbol)
@@ -447,6 +452,96 @@ def fetch_symbol_data_fallback(raw_symbol: str) -> dict:
         "last_updated": get_thai_datetime_str()
     }
 
+def fetch_symbol_yahoo_direct(raw_symbol: str) -> dict | None:
+    """Fetch live real-time market data directly from Yahoo Finance v8 chart."""
+    display_sym, yf_sym, sa_url = resolve_ticker(raw_symbol)
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yf_sym}?interval=1d&range=5y&events=div"
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())['chart']['result'][0]
+            meta = data.get('meta', {})
+            price = meta.get('regularMarketPrice')
+            if price is None or pd.isna(price):
+                return None
+            price_val = round(float(price), 2)
+
+            chg_pct = meta.get('regularMarketChangePercent')
+            if chg_pct is not None and not pd.isna(chg_pct):
+                change_val = round(float(chg_pct), 2)
+            else:
+                change_val = 0.0
+
+            ts = data.get('timestamp', [])
+            raw_c = data.get('indicators', {}).get('quote', [{}])[0].get('close', [])
+            valid_pairs = [(t, float(c)) for t, c in zip(ts, raw_c) if c is not None and not pd.isna(c)]
+
+            if change_val == 0.0 and len(valid_pairs) >= 2:
+                prev_c = valid_pairs[-2][1]
+                if prev_c > 0:
+                    change_val = round(((price_val - prev_c) / prev_c) * 100, 2)
+
+            # Daily RSI
+            rsi_daily = calculate_rsi(pd.Series([c for _, c in valid_pairs]))
+
+            # Weekly RSI
+            w_map = {}
+            for t, c in valid_pairs:
+                w_map[(t + 345600) // 604800] = c
+            rsi_weekly = calculate_rsi(pd.Series(list(w_map.values())))
+
+            # Monthly RSI
+            m_map = {}
+            for t, c in valid_pairs:
+                d = datetime.fromtimestamp(t, timezone.utc)
+                m_map[f"{d.year}-{d.month:02d}"] = c
+            rsi_monthly = calculate_rsi(pd.Series(list(m_map.values())))
+
+            # 52w range & volume
+            high_52 = meta.get('fiftyTwoWeekHigh')
+            low_52 = meta.get('fiftyTwoWeekLow')
+
+            # Dividend calculation
+            events = data.get('events', {}).get('dividends', {})
+            now_ts = datetime.now().timestamp()
+            yr_ts = now_ts - 365 * 86400
+            ttm_div = sum(float(d.get('amount', 0)) for d in events.values() if d.get('date', 0) >= yr_ts)
+            div_y = round((ttm_div / price_val) * 100, 2) if price_val > 0 and ttm_div > 0 else BASELINE_DIV_YIELD_MAP.get(display_sym)
+
+            # Asset type
+            instr_type = meta.get('instrumentType', '').upper()
+            if display_sym.endswith('-USD') or display_sym.startswith('BTC') or display_sym.startswith('ETH'):
+                q_type = 'CRYPTOCURRENCY'
+            elif instr_type == 'ETF' or display_sym in ['SCHD', 'SPYI', 'VYMI', 'IAUI', 'ACWI']:
+                q_type = 'ETF'
+            else:
+                q_type = 'EQUITY'
+
+            curr = meta.get('currency') or ('THB' if display_sym.startswith('BKK:') else ('HKD' if display_sym.startswith('HKG:') else 'USD'))
+            name = meta.get('shortName') or meta.get('longName') or display_sym
+
+            return {
+                "symbol": display_sym,
+                "name": name,
+                "type": q_type,
+                "currency": curr,
+                "price": price_val,
+                "change_pct": change_val,
+                "market_cap": None,
+                "pe": BASELINE_PE_MAP.get(display_sym),
+                "dividend_yield": div_y,
+                "rsi_daily": rsi_daily,
+                "rsi_weekly": rsi_weekly,
+                "rsi_monthly": rsi_monthly,
+                "high_52w": round(float(high_52), 2) if high_52 is not None and not pd.isna(high_52) else None,
+                "low_52w": round(float(low_52), 2) if low_52 is not None and not pd.isna(low_52) else None,
+                "stockanalysis_url": sa_url if sa_url else get_stockanalysis_url(display_sym, q_type),
+                "last_updated": get_thai_datetime_str()
+            }
+    except Exception as e:
+        print(f"Warning: Direct Yahoo chart fetch failed for {raw_symbol}: {e}")
+        return None
+
 def main():
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     watchlist_path = os.path.join(base_dir, "data", "watchlist.json")
@@ -460,38 +555,62 @@ def main():
         symbols = json.load(f)
 
     print(f"Loaded {len(symbols)} symbols from {watchlist_path}")
-    print("Fetching live real-time market data via TradingView Scanner...")
-    tv_results = fetch_tradingview_batch(symbols)
-    print(f"TradingView scanner returned {len(tv_results)} / {len(symbols)} symbols.")
+    print("Fetching live market data...")
+    try:
+        tv_results = fetch_tradingview_batch(symbols)
+        print(f"TradingView scanner returned {len(tv_results)} / {len(symbols)} symbols.")
+    except Exception as e:
+        print(f"TradingView scanner error: {e}")
+        tv_results = {}
 
     results = []
     for symbol in symbols:
         raw_sym = symbol.strip().upper()
-        if raw_sym in tv_results:
-            results.append(tv_results[raw_sym])
-        else:
+        display_sym, _, sa_url = resolve_ticker(symbol)
+        tv_item = tv_results.get(raw_sym)
+
+        # 1. Primary: Direct Yahoo Finance live chart for zero-delay real-time prices & Wilder RSI
+        yf_item = fetch_symbol_yahoo_direct(symbol)
+
+        # 2. If direct Yahoo chart failed, try yfinance fallback
+        if yf_item is None:
             try:
-                data = fetch_symbol_data_fallback(symbol)
-                results.append(data)
+                yf_item = fetch_symbol_data_fallback(symbol)
             except Exception as e:
-                print(f"Error fetching {symbol}: {e}")
-                display_sym, _, sa_url = resolve_ticker(symbol)
-                results.append({
-                    "symbol": display_sym,
-                    "name": display_sym,
-                    "type": "UNKNOWN",
-                    "currency": "USD",
-                    "price": None,
-                    "change_pct": None,
-                    "market_cap": None,
-                    "pe": BASELINE_PE_MAP.get(display_sym),
-                    "dividend_yield": BASELINE_DIV_YIELD_MAP.get(display_sym),
-                    "rsi_daily": None,
-                    "rsi_weekly": None,
-                    "rsi_monthly": None,
-                    "stockanalysis_url": sa_url or f"https://stockanalysis.com/?s={display_sym}",
-                    "last_updated": get_thai_datetime_str()
-                })
+                print(f"yfinance fallback failed for {symbol}: {e}")
+                yf_item = None
+
+        if yf_item and yf_item.get("price") is not None:
+            # Merge TradingView's market_cap and pe if available
+            if tv_item:
+                if not yf_item.get("market_cap") and tv_item.get("market_cap"):
+                    yf_item["market_cap"] = tv_item["market_cap"]
+                if yf_item.get("pe") is None and tv_item.get("pe") is not None:
+                    yf_item["pe"] = tv_item["pe"]
+                if yf_item.get("dividend_yield") is None and tv_item.get("dividend_yield") is not None:
+                    yf_item["dividend_yield"] = tv_item["dividend_yield"]
+            results.append(yf_item)
+        elif tv_item and tv_item.get("price") is not None:
+            # Fall back to TradingView if Yahoo was unavailable
+            results.append(tv_item)
+        else:
+            # Ultimate fallback
+            results.append({
+                "symbol": display_sym,
+                "name": display_sym,
+                "type": "UNKNOWN",
+                "currency": "USD",
+                "price": None,
+                "change_pct": None,
+                "market_cap": None,
+                "pe": BASELINE_PE_MAP.get(display_sym),
+                "dividend_yield": BASELINE_DIV_YIELD_MAP.get(display_sym),
+                "rsi_daily": None,
+                "rsi_weekly": None,
+                "rsi_monthly": None,
+                "stockanalysis_url": sa_url or f"https://stockanalysis.com/?s={display_sym}",
+                "last_updated": get_thai_datetime_str()
+            })
 
     thai_now = get_thai_datetime_str()
     output_data = {
