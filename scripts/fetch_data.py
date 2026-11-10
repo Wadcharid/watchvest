@@ -239,6 +239,8 @@ def fetch_tradingview_batch(symbols: list[str]) -> dict[str, dict]:
                         desc = matched_d[11]
                         curr = matched_d[12] or ('THB' if sym.startswith('BKK:') else ('HKD' if sym.startswith('HKG:') else 'USD'))
                         raw_type = matched_d[13]
+                        high_52 = matched_d[8]
+                        low_52 = matched_d[9]
 
                         q_type = map_tv_type(raw_type, sym)
                         display_sym, _, direct_sa = resolve_ticker(sym)
@@ -271,6 +273,8 @@ def fetch_tradingview_batch(symbols: list[str]) -> dict[str, dict]:
                             "rsi_daily": round(float(rsi_d), 2) if rsi_d is not None and not pd.isna(rsi_d) else None,
                             "rsi_weekly": round(float(rsi_w), 2) if rsi_w is not None and not pd.isna(rsi_w) else None,
                             "rsi_monthly": round(float(rsi_m), 2) if rsi_m is not None and not pd.isna(rsi_m) else None,
+                            "high_52w": round(float(high_52), 2) if high_52 is not None and not pd.isna(high_52) else None,
+                            "low_52w": round(float(low_52), 2) if low_52 is not None and not pd.isna(low_52) else None,
                             "stockanalysis_url": sa_url,
                             "last_updated": get_thai_datetime_str()
                         }
@@ -408,6 +412,18 @@ def fetch_symbol_data_fallback(raw_symbol: str) -> dict:
     pe = info.get("trailingPE") or info.get("forwardPE") or BASELINE_PE_MAP.get(display_symbol)
     pe = round(float(pe), 2) if pe is not None and not pd.isna(pe) and pe > 0 else None
 
+    high_52 = info.get("fiftyTwoWeekHigh")
+    low_52 = info.get("fiftyTwoWeekLow")
+    try:
+        if (high_52 is None or low_52 is None) and not df_daily.empty:
+            tail_df = df_daily.tail(252)
+            if high_52 is None and "High" in tail_df:
+                high_52 = float(tail_df["High"].max())
+            if low_52 is None and "Low" in tail_df:
+                low_52 = float(tail_df["Low"].min())
+    except Exception:
+        pass
+
     div_yield = calculate_best_dividend_yield(ticker, info, price_val, quote_type, display_symbol)
     market_cap_str = format_market_cap(info.get("marketCap"))
     stockanalysis_url = direct_sa_url if direct_sa_url else get_stockanalysis_url(display_symbol, quote_type)
@@ -425,6 +441,8 @@ def fetch_symbol_data_fallback(raw_symbol: str) -> dict:
         "rsi_daily": rsi_daily,
         "rsi_weekly": rsi_weekly,
         "rsi_monthly": rsi_monthly,
+        "high_52w": round(float(high_52), 2) if high_52 is not None and not pd.isna(high_52) else None,
+        "low_52w": round(float(low_52), 2) if low_52 is not None and not pd.isna(low_52) else None,
         "stockanalysis_url": stockanalysis_url,
         "last_updated": get_thai_datetime_str()
     }

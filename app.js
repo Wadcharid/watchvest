@@ -134,6 +134,12 @@ async function loadBaselineData() {
           if (!asset.market_cap && existing && existing.market_cap) {
             asset.market_cap = existing.market_cap;
           }
+          if ((asset.high_52w === null || asset.high_52w === undefined) && existing && existing.high_52w !== null && existing.high_52w !== undefined) {
+            asset.high_52w = existing.high_52w;
+          }
+          if ((asset.low_52w === null || asset.low_52w === undefined) && existing && existing.low_52w !== null && existing.low_52w !== undefined) {
+            asset.low_52w = existing.low_52w;
+          }
           marketDataMap.set(asset.symbol, asset);
         });
         if (data.last_updated) {
@@ -330,6 +336,8 @@ async function fetchActiveListMarketData(forceRefresh = false) {
             rsi_daily: (asset.rsi_daily !== null && asset.rsi_daily !== undefined) ? asset.rsi_daily : (prev.rsi_daily ?? null),
             rsi_weekly: (asset.rsi_weekly !== null && asset.rsi_weekly !== undefined) ? asset.rsi_weekly : (prev.rsi_weekly ?? null),
             rsi_monthly: (asset.rsi_monthly !== null && asset.rsi_monthly !== undefined) ? asset.rsi_monthly : (prev.rsi_monthly ?? null),
+            high_52w: (asset.high_52w !== null && asset.high_52w !== undefined) ? asset.high_52w : (prev.high_52w ?? null),
+            low_52w: (asset.low_52w !== null && asset.low_52w !== undefined) ? asset.low_52w : (prev.low_52w ?? null),
           };
           marketDataMap.set(asset.symbol, merged);
         });
@@ -361,6 +369,8 @@ async function fetchActiveListMarketData(forceRefresh = false) {
               rsi_daily: (asset.rsi_daily !== null && asset.rsi_daily !== undefined) ? asset.rsi_daily : (prev.rsi_daily ?? null),
               rsi_weekly: (asset.rsi_weekly !== null && asset.rsi_weekly !== undefined) ? asset.rsi_weekly : (prev.rsi_weekly ?? null),
               rsi_monthly: (asset.rsi_monthly !== null && asset.rsi_monthly !== undefined) ? asset.rsi_monthly : (prev.rsi_monthly ?? null),
+              high_52w: (asset.high_52w !== null && asset.high_52w !== undefined) ? asset.high_52w : (prev.high_52w ?? null),
+              low_52w: (asset.low_52w !== null && asset.low_52w !== undefined) ? asset.low_52w : (prev.low_52w ?? null),
             };
             marketDataMap.set(asset.symbol, merged);
           });
@@ -486,8 +496,8 @@ function renderTableHeader() {
         ${makeTh('change_pct', '% เปลี่ยนแปลง', 'right')}
         ${makeTh('pe', 'P/E Ratio', 'right')}
         ${makeTh('dividend_yield', 'Dividend Yield', 'right')}
-        ${makeTh('volume', 'Volume', 'right')}
-        ${makeTh('high_52w', '52W High', 'right')}
+        ${makeTh('high_52w', '52W High (%)', 'right')}
+        ${makeTh('low_52w', '52W Low (%)', 'right')}
         <th class="text-center" style="width: 60px;">จัดการ</th>
       </tr>
     `;
@@ -531,9 +541,8 @@ function renderTableHeader() {
         ${makeTh('rsi_daily', 'Daily RSI', 'center')}
         ${makeTh('rsi_weekly', 'Weekly RSI', 'center')}
         ${makeTh('rsi_monthly', 'Monthly RSI', 'center')}
-        ${makeTh('volume', 'Volume', 'right')}
-        ${makeTh('high_52w', '52W High', 'right')}
-        ${makeTh('low_52w', '52W Low', 'right')}
+        ${makeTh('high_52w', '52W High (%)', 'right')}
+        ${makeTh('low_52w', '52W Low (%)', 'right')}
         <th class="text-center" style="width: 60px;">จัดการ</th>
       </tr>
     `;
@@ -574,8 +583,8 @@ function renderTableBody(items) {
           <td class="text-right">${changeHtml}</td>
           <td class="text-right mono">${formatVal(asset.pe)}</td>
           <td class="text-right mono">${formatPercent(asset.dividend_yield)}</td>
-          <td class="text-right mono" style="color: var(--text-secondary);">${formatVolume(asset.volume)}</td>
-          <td class="text-right mono">${formatPrice(asset.high_52w, asset.currency)}</td>
+          <td class="text-right mono">${format52wHigh(asset)}</td>
+          <td class="text-right mono">${format52wLow(asset)}</td>
           <td class="text-center">${deleteBtn}</td>
         </tr>
       `;
@@ -620,9 +629,8 @@ function renderTableBody(items) {
           <td class="text-center">${formatRsiPill(asset.rsi_daily)}</td>
           <td class="text-center">${formatRsiPill(asset.rsi_weekly)}</td>
           <td class="text-center">${formatRsiPill(asset.rsi_monthly)}</td>
-          <td class="text-right mono" style="color: var(--text-secondary);">${formatVolume(asset.volume)}</td>
-          <td class="text-right mono">${formatPrice(asset.high_52w, asset.currency)}</td>
-          <td class="text-right mono">${formatPrice(asset.low_52w, asset.currency)}</td>
+          <td class="text-right mono">${format52wHigh(asset)}</td>
+          <td class="text-right mono">${format52wLow(asset)}</td>
           <td class="text-center">${deleteBtn}</td>
         </tr>
       `;
@@ -679,6 +687,50 @@ function formatVal(val) {
 function formatPercent(val) {
   if (val === null || val === undefined || isNaN(val)) return '-';
   return `${val.toFixed(2)}%`;
+}
+
+function calculate52wHighPct(asset) {
+  if (!asset || asset.price === null || asset.price === undefined ||
+      asset.high_52w === null || asset.high_52w === undefined || asset.high_52w <= 0) {
+    return null;
+  }
+  return ((asset.price - asset.high_52w) / asset.high_52w) * 100;
+}
+
+function calculate52wLowPct(asset) {
+  if (!asset || asset.price === null || asset.price === undefined ||
+      asset.low_52w === null || asset.low_52w === undefined || asset.low_52w <= 0) {
+    return null;
+  }
+  return ((asset.price - asset.low_52w) / asset.low_52w) * 100;
+}
+
+function format52wHigh(asset) {
+  const pct = calculate52wHighPct(asset);
+  if (pct === null || isNaN(pct)) return '<span style="color: var(--text-muted);">-</span>';
+  const isPos = pct > 0.001;
+  const isZero = Math.abs(pct) <= 0.001;
+  const sign = isPos ? '+' : '';
+  const color = isPos ? 'var(--green-text)' : (isZero ? 'var(--text-muted)' : 'var(--red-text)');
+  const highPriceStr = formatPrice(asset.high_52w, asset.currency);
+  const curPriceStr = formatPrice(asset.price, asset.currency);
+  const diffFromPrice = asset.price > 0 ? (((asset.high_52w - asset.price) / asset.price) * 100).toFixed(2) : '0.00';
+  const tooltip = `52W High: ${highPriceStr} | ราคาล่าสุด: ${curPriceStr} (${pct < 0 ? 'ต่ำกว่า High ' : ''}${sign}${pct.toFixed(2)}% / ห่างจากราคาปัจจุบัน +${diffFromPrice}%)`;
+  return `<span style="color: ${color}; font-weight: 500;" title="${escapeHtml(tooltip)}">${sign}${pct.toFixed(2)}%</span>`;
+}
+
+function format52wLow(asset) {
+  const pct = calculate52wLowPct(asset);
+  if (pct === null || isNaN(pct)) return '<span style="color: var(--text-muted);">-</span>';
+  const isPos = pct > 0.001;
+  const isZero = Math.abs(pct) <= 0.001;
+  const sign = isPos ? '+' : '';
+  const color = isPos ? 'var(--green-text)' : (isZero ? 'var(--text-muted)' : 'var(--red-text)');
+  const lowPriceStr = formatPrice(asset.low_52w, asset.currency);
+  const curPriceStr = formatPrice(asset.price, asset.currency);
+  const diffFromPrice = asset.price > 0 ? (((asset.low_52w - asset.price) / asset.price) * 100).toFixed(2) : '0.00';
+  const tooltip = `52W Low: ${lowPriceStr} | ราคาล่าสุด: ${curPriceStr} (${pct > 0 ? 'สูงกว่า Low ' : ''}${sign}${pct.toFixed(2)}% / ห่างจากราคาปัจจุบัน ${diffFromPrice}%)`;
+  return `<span style="color: ${color}; font-weight: 500;" title="${escapeHtml(tooltip)}">${sign}${pct.toFixed(2)}%</span>`;
 }
 
 function formatVolume(val) {
@@ -755,8 +807,16 @@ function sortItems(items) {
     let valA = a[column];
     let valB = b[column];
 
-    if (valA === null || valA === undefined) return 1;
-    if (valB === null || valB === undefined) return -1;
+    if (column === 'high_52w') {
+      valA = calculate52wHighPct(a);
+      valB = calculate52wHighPct(b);
+    } else if (column === 'low_52w') {
+      valA = calculate52wLowPct(a);
+      valB = calculate52wLowPct(b);
+    }
+
+    if (valA === null || valA === undefined || isNaN(valA)) return 1;
+    if (valB === null || valB === undefined || isNaN(valB)) return -1;
 
     if (typeof valA === 'string') {
       return valA.localeCompare(valB) * mult;

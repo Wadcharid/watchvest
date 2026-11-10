@@ -13,7 +13,7 @@
 1. **ถอดแบบหน้าตาและการทำงานสไตล์ StockAnalysis.com:**
    * **Multiple Watchlists (รองรับหลายพอร์ตพร้อมกัน):** สลับดูระหว่าง "พอร์ตหลัก", "หุ้นเติบโต", "หุ้น & กองทุนปันผล" หรือกดปุ่ม `+ สร้าง List ใหม่`, เปลี่ยนชื่อ, คัดลอก, และลบได้ตามต้องการ
    * **StockAnalysis Views Switcher:** สลับมุมมองตารางข้อมูลได้ 4 โหมด:
-     * 📊 **Overview:** ราคาล่าสุด, % เปลี่ยนแปลง 24h, P/E Ratio, Dividend Yield, Volume, 52-Week High
+     * 📊 **Overview:** ราคาล่าสุด, % เปลี่ยนแปลง 24h, Market Cap, P/E Ratio, Dividend Yield, 52W High (%), 52W Low (%)
      * 📈 **Technical (RSI):** Daily RSI (14), Weekly RSI (14), Monthly RSI (14), ป้ายสถานะโซน RSI (Oversold / Neutral / Overbought)
      * 💰 **Dividends:** เน้นดูอัตราเงินปันผลตอบแทน (TTM Cash Distribution Yield), P/E Ratio
      * 🌐 **All Columns:** รวมทุกคอลัมน์สำคัญไว้ในตารางกว้างแบบเลื่อนได้ (พร้อมตรึงคอลัมน์ Symbol ไว้)
