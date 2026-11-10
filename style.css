@@ -1113,6 +1113,41 @@ html.light .theme-moon { display: block; }
   margin-top: 4px;
 }
 
+.edge-status-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-main);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-top: 14px;
+}
+
+.edge-status-card strong {
+  font-size: 13px;
+  color: var(--text-main);
+  display: block;
+  margin-bottom: 2px;
+}
+
+.edge-status-card p {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.edge-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  flex-shrink: 0;
+  animation: pulse-dot 2s infinite;
+}
+
 .btn-group-row {
   display: flex;
   gap: 8px;

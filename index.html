@@ -237,14 +237,20 @@
           <hr class="modal-divider">
 
           <div class="form-group">
-            <label>GitHub Personal Access Token (PAT) (ทางเลือกสำหรับซิงก์กลับ GitHub):</label>
-            <input type="password" id="modalGithubPat" placeholder="ghp_xxxxxxxxxxxxxxx">
-            <p class="field-hint">ใส่เมื่อต้องการกดซิงก์ข้อมูล Watchlist ไปบันทึกที่ Repository <code>Wadcharid/watchvest</code></p>
+            <label>สำรองข้อมูล & แชร์ Watchlist (Backup & Share):</label>
             <div class="btn-group-row">
-              <button id="btnSavePat" class="btn btn-secondary btn-sm">บันทึก Token</button>
-              <button id="btnSyncToGithub" class="btn btn-outline btn-sm">ซิงก์ไปยัง GitHub Repo</button>
+              <button id="btnDownloadJson" class="btn btn-secondary btn-sm">💾 ดาวน์โหลดไฟล์ JSON</button>
+              <button id="btnShareWatchlist" class="btn btn-secondary btn-sm">🔗 คัดลอกลิงก์แชร์พอร์ต</button>
             </div>
-            <div id="githubSyncStatus" class="sync-status-text"></div>
+            <p class="field-hint">สามารถดาวน์โหลดเก็บไว้ในเครื่อง หรือแชร์ URL ให้เพื่อนเปิดดูพอร์ตนี้ได้ทันที</p>
+          </div>
+
+          <div class="edge-status-card">
+            <div class="edge-status-dot"></div>
+            <div>
+              <strong>Cloudflare Pages Serverless Edge API</strong>
+              <p>ดึงราคาสด Real-Time จากตลาดแบบ Tick-by-Tick ไม่ผ่านบอท Cron ไม่เก็บข้อมูลส่วนตัว</p>
+            </div>
           </div>
         </div>
         <div class="modal-footer">

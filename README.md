@@ -2,9 +2,9 @@
 
 ระบบติดตามและวิเคราะห์ข้อมูลสินทรัพย์การลงทุน ออกแบบและถอดแบบการทำงานเลียนแบบ [StockAnalysis.com/watchlist/](https://stockanalysis.com/watchlist/) อย่างเต็มรูปแบบ รองรับหุ้นสหรัฐฯ (US Stocks), กองทุนรวม ETF, หุ้นไทย (SET BKK), หุ้นฮ่องกง (HKEX) และคริปโทเคอร์เรนซี (Crypto) พร้อมการคำนวณดัชนีทางเทคนิค Multi-Timeframe RSI (Daily, Weekly, Monthly) ตามมาตรฐาน TradingView
 
+🚀 **Official Live Web Application:** [https://watchvest.pages.dev/](https://watchvest.pages.dev/)  
 🌐 **Repository:** [https://github.com/Wadcharid/watchvest](https://github.com/Wadcharid/watchvest)  
-🚀 **GitHub Pages URL:** [https://wadcharid.github.io/watchvest/](https://wadcharid.github.io/watchvest/)  
-☁️ **Cloudflare Pages:** รองรับ Edge Serverless Functions ในโฟลเดอร์ `functions/api/` เพื่อการดึงข้อมูลสดทันทีแบบ Real-Time ไม่มีปัญหา CORS
+☁️ **Serverless Architecture:** ทำงานบน Cloudflare Pages Functions (`functions/api/`) ประมวลผลราคา Real-Time แบบ Serverless Edge ไม่มีปัญหา CORS ไม่ต้องพึ่งพาบอท Cron
 
 ---
 
@@ -20,9 +20,9 @@
    * **Instant Search & Autocomplete:** ค้นหาและพิมพ์ชื่อหุ้นเพื่อเพิ่มเข้า Watchlist ได้ทันที พร้อมระบบแนะนำอัตโนมัติ
 
 2. **ระบบดึงข้อมูล Real-time ผ่าน Cloudflare Pages Functions (`functions/api/`):**
+   * `/api/quote?symbols={symbols}`: ดึงราคาแบบสดใหม่ Real-Time Tick-by-Tick, คำนวณ Wilder's 14 RSI (Daily, Weekly, Monthly) และ TTM Dividend Yield จาก Edge โดยตรง
    * `/api/search?q={query}`: ค้นหาหุ้น กองทุน และสินทรัพย์การลงทุน
-   * `/api/quote?symbols={symbols}`: ดึงราคาแบบสดใหม่, คำนวณ Wilder's 14 RSI (Daily, Weekly, Monthly) และ TTM Dividend Yield จาก Edge แบบ Real-Time ไม่มีติด CORS
-   * **ระบบสำรอง (Fallback):** สามารถโหลดข้อมูลจาก `data/stocks.json` ได้อัตโนมัติหากรันในสภาพแวดล้อม Static ทั่วไป
+   * **Auto-Refresh Engine:** รีเฟรชราคาอัตโนมัติทุก 30 วินาทีขณะเปิดดูหน้าจอ และอัปเดตทันทีเมื่อสลับแท็บกลับมา
 
 3. **มาตรฐานการคำนวณที่แม่นยำ:**
    * **Wilder's RSI (14 งวด):** อ้างอิงราคาปิดจริงในตลาด (Split-Adjusted Only) ตรงตามมาตรฐาน TradingView และ StockAnalysis (แก้ปัญหาภาพลวงตา RSI พุ่งสูงในกองทุนปันผลสูง เช่น SPYI, IAUI)
@@ -31,25 +31,6 @@
 
 4. **การปรับแต่งและสไตล์ (UI/UX):**
    * รองรับทั้ง **🌙 Dark Mode** (เนวี่บลูเข้มสไตล์ StockAnalysis) และ **☀️ Light Mode**
+   * ระบบ **Backup & Share**: ดาวน์โหลดไฟล์ Watchlist JSON หรือแชร์ URL Hash (`#symbols=NVDA,MSFT`) ให้เปิดดูข้ามเครื่องได้ทันที
    * มีสรุปตัวเลขสถิติ (Total Assets, Gainers, Losers, RSI Oversold, RSI Overbought)
    * มีปุ่มลบสินทรัพย์ออกจากพอร์ต และปุ่มเปิดหน้ารายละเอียดบน [StockAnalysis.com](https://stockanalysis.com/) โดยตรง
-
----
-
-## ☁️ วิธีเชื่อมต่อเข้ากับ Cloudflare Pages (แนะนำ)
-
-1. เข้าสู่แดชบอร์ดของ [Cloudflare Dashboard](https://dash.cloudflare.com/)
-2. ไปที่เมนู **Workers & Pages** > กด **Create Application** > เลือกแท็บ **Pages**
-3. เลือก **Connect to Git** แล้วเลือก Repository: `Wadcharid/watchvest`
-4. ตั้งค่า Build:
-   * **Framework preset:** None
-   * **Build command:** *(เว้นว่างไว้)*
-   * **Build output directory:** `/` *(หรือ root)*
-5. กด **Save and Deploy**
-6. เว็บไซต์ของคุณจะออนไลน์ทันทีที่โดเมน Cloudflare Pages (เช่น `https://watchvest.pages.dev/`) พร้อมใช้งาน Edge API `/api/quote` สดใหม่ตลอดเวลา
-
----
-
-## 🤖 ระบบสำรอง GitHub Actions (อัปเดตอัตโนมัติ)
-
-ไฟล์ `.github/workflows/update_data.yml` จะคอยรัน Python คำนวณข้อมูลอัตโนมัติทุกๆ 3 ชั่วโมงตลอด 24 ชั่วโมง และอัปเดตไฟล์ `data/stocks.json` เพื่อให้ข้อมูลพร้อมใช้งานอยู่เสมอ

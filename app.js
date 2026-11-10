@@ -7,11 +7,8 @@ const STORAGE_KEYS = {
   WATCHLISTS: 'watchvest_watchlists',
   ACTIVE_LIST_ID: 'watchvest_active_list_id',
   THEME: 'watchvest_theme',
-  GITHUB_PAT: 'watchvest_github_pat',
   VIEW_MODE: 'watchvest_view_mode'
 };
-
-const GITHUB_REPO = 'Wadcharid/watchvest';
 
 // Default Watchlist Configuration
 const DEFAULT_WATCHLISTS = {
@@ -86,10 +83,8 @@ const btnDoneSettings = document.getElementById('btnDoneSettings');
 const modalWatchlistJson = document.getElementById('modalWatchlistJson');
 const btnApplyModalJson = document.getElementById('btnApplyModalJson');
 const btnCopyModalJson = document.getElementById('btnCopyModalJson');
-const modalGithubPat = document.getElementById('modalGithubPat');
-const btnSavePat = document.getElementById('btnSavePat');
-const btnSyncToGithub = document.getElementById('btnSyncToGithub');
-const githubSyncStatus = document.getElementById('githubSyncStatus');
+const btnDownloadJson = document.getElementById('btnDownloadJson');
+const btnShareWatchlist = document.getElementById('btnShareWatchlist');
 const btnResetToDefaults = document.getElementById('btnResetToDefaults');
 
 const renameModal = document.getElementById('renameModal');
@@ -204,6 +199,9 @@ function loadWatchlistsState() {
     saveWatchlists();
   }
 
+  // Check if URL has shared symbols hash (e.g. #symbols=NVDA,MSFT,BTC-USD)
+  checkUrlHashSymbols();
+
   const savedActiveId = localStorage.getItem(STORAGE_KEYS.ACTIVE_LIST_ID);
   if (savedActiveId && appWatchlists[savedActiveId]) {
     activeListId = savedActiveId;
@@ -212,6 +210,28 @@ function loadWatchlistsState() {
   }
 
   renderWatchlistTabs();
+}
+
+function checkUrlHashSymbols() {
+  try {
+    if (window.location.hash.startsWith('#symbols=')) {
+      const raw = window.location.hash.replace('#symbols=', '');
+      const syms = raw.split(',').map(s => decodeURIComponent(s).trim().toUpperCase()).filter(Boolean);
+      if (syms.length > 0) {
+        const shareListId = 'shared';
+        appWatchlists[shareListId] = {
+          id: shareListId,
+          name: 'พอร์ตที่แชร์ (Shared)',
+          symbols: syms
+        };
+        activeListId = shareListId;
+        saveWatchlists();
+        showToast(`🔗 โหลด Watchlist ที่แชร์ ${syms.length} สินทรัพย์เรียบร้อย`);
+      }
+    }
+  } catch (e) {
+    console.warn('Error parsing URL hash symbols:', e);
+  }
 }
 
 function saveWatchlists() {
@@ -1185,13 +1205,30 @@ function setupEventListeners() {
     }
   });
 
-  btnSavePat.addEventListener('click', () => {
-    const pat = modalGithubPat.value.trim();
-    localStorage.setItem(STORAGE_KEYS.GITHUB_PAT, pat);
-    showToast('🔑 บันทึก GitHub Token ลงในเครื่องเรียบร้อย');
+  // Download JSON Backup
+  btnDownloadJson.addEventListener('click', () => {
+    const current = getActiveWatchlist();
+    const jsonStr = JSON.stringify(current.symbols, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `watchvest_${current.id || 'watchlist'}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('💾 ดาวน์โหลดไฟล์ Watchlist เรียบร้อย');
   });
 
-  btnSyncToGithub.addEventListener('click', handleSyncToGithub);
+  // Share Watchlist via URL Hash
+  btnShareWatchlist.addEventListener('click', () => {
+    const current = getActiveWatchlist();
+    const url = `${window.location.origin}${window.location.pathname}#symbols=${current.symbols.join(',')}`;
+    navigator.clipboard.writeText(url).then(() => {
+      showToast('🔗 คัดลอกลิงก์แชร์พอร์ตไปยังคลิปบอร์ดแล้ว');
+    }).catch(() => {
+      prompt('คัดลอกลิงก์แชร์พอร์ต:', url);
+    });
+  });
 
   btnResetToDefaults.addEventListener('click', () => {
     if (confirm('คุณต้องการรีเซ็ต Watchlist ทั้งหมดกลับเป็นค่าเริ่มต้นหรือไม่?')) {
@@ -1210,73 +1247,11 @@ function setupEventListeners() {
 function openSettingsModal() {
   const current = getActiveWatchlist();
   modalWatchlistJson.value = JSON.stringify(current.symbols, null, 2);
-  modalGithubPat.value = localStorage.getItem(STORAGE_KEYS.GITHUB_PAT) || '';
-  githubSyncStatus.textContent = '';
   settingsModal.classList.remove('hidden');
 }
 
 function closeSettingsModal() {
   settingsModal.classList.add('hidden');
-}
-
-/* ==========================================================================
-   GitHub Repository Direct Sync
-   ========================================================================== */
-async function handleSyncToGithub() {
-  const token = modalGithubPat.value.trim();
-  if (!token) {
-    alert('กรุณากรอก GitHub Token ก่อนกดซิงก์');
-    return;
-  }
-  localStorage.setItem(STORAGE_KEYS.GITHUB_PAT, token);
-  githubSyncStatus.textContent = '⏳ กำลังติดต่อ GitHub API...';
-
-  const current = getActiveWatchlist();
-
-  try {
-    // 1. Get current SHA of data/watchlist.json
-    const getRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/data/watchlist.json`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/vnd.github.v3+json'
-      }
-    });
-
-    let sha = null;
-    if (getRes.ok) {
-      const getData = await getRes.json();
-      sha = getData.sha;
-    }
-
-    githubSyncStatus.textContent = '⏳ กำลังบันทึก data/watchlist.json ไปยัง Repository...';
-    const contentBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(current.symbols, null, 2) + '\n')));
-
-    const putRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/data/watchlist.json`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        message: `Update watchlist.json (${current.name}) from Watchvest UI`,
-        content: contentBase64,
-        sha: sha
-      })
-    });
-
-    if (!putRes.ok) {
-      const err = await putRes.json();
-      throw new Error(err.message || 'PUT failed');
-    }
-
-    githubSyncStatus.textContent = '✅ ซิงก์ข้อมูลไปยัง GitHub Repository สำเร็จเรียบร้อย!';
-    showToast('🚀 ซิงก์ข้อมูลเข้าสู่ GitHub เรียบร้อยแล้ว');
-  } catch (err) {
-    console.error('GitHub Sync Error:', err);
-    githubSyncStatus.textContent = `❌ ข้อผิดพลาด: ${err.message}`;
-    alert(`การซิงก์ล้มเหลว: ${err.message}`);
-  }
 }
 
 /* ==========================================================================
