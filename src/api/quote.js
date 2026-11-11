@@ -5,39 +5,39 @@
  */
 
 const BASELINE_PE_MAP = {
-  'NVDA': 22.96,
-  'MSFT': 27.98,
-  'GOOGL': 14.75,
-  'AMZN': 21.03,
+  'NVDA': 21.35,
+  'MSFT': 27.84,
+  'GOOGL': 15.00,
+  'AMZN': 21.89,
   'SCHD': 18.34,
-  'TSM': 23.88,
+  'TSM': 25.52,
   'SPYI': 22.85,
   'VYMI': 13.12,
-  'BKK:CPALL': 13.52,
-  'BKK:BDMS': 20.44,
-  'BKK:GULF': 2.99,
-  'BKK:PTTEP': 7.72,
-  'HKG:0700': 14.28,
+  'BKK:CPALL': 13.89,
+  'BKK:BDMS': 20.75,
+  'BKK:GULF': 23.71,
+  'BKK:PTTEP': 8.00,
+  'HKG:0700': 14.50,
   'ACWI': 19.36
 };
 
 const BASELINE_DIV_YIELD_MAP = {
-  'NVDA': 0.55,
-  'MSFT': 0.73,
+  'NVDA': 0.59,
+  'MSFT': 0.74,
   'GOOGL': 0.31,
   'AMZN': null,
-  'SCHD': 2.98,
+  'SCHD': 2.96,
   'BTC-USD': null,
-  'TSM': 1.15,
-  'SPYI': 12.36,
-  'VYMI': 3.67,
-  'BKK:CPALL': 3.63,
-  'BKK:BDMS': 5.08,
-  'BKK:GULF': 1.72,
-  'IAUI': 14.18,
-  'HKG:0700': 1.26,
-  'ACWI': 1.47,
-  'BKK:PTTEP': 6.10
+  'TSM': 0.81,
+  'SPYI': 12.08,
+  'VYMI': 3.62,
+  'BKK:CPALL': 3.49,
+  'BKK:BDMS': 3.75,
+  'BKK:GULF': 1.66,
+  'IAUI': 13.76,
+  'HKG:0700': 1.27,
+  'ACWI': 1.44,
+  'BKK:PTTEP': 6.47
 };
 
 const TV_KNOWN_TICKERS = {
@@ -285,9 +285,6 @@ async function fetchTradingViewBatch(symbols) {
             let peVal = matched[6] !== null && !isNaN(matched[6]) && matched[6] > 0 ? Math.round(matched[6] * 100) / 100 : (BASELINE_PE_MAP[sym] ?? null);
 
             let divVal = matched[7] !== null && !isNaN(matched[7]) && matched[7] > 0 ? Math.round(matched[7] * 100) / 100 : (BASELINE_DIV_YIELD_MAP[sym] ?? null);
-            if (sym === 'BKK:BDMS' && BASELINE_DIV_YIELD_MAP['BKK:BDMS']) {
-              divVal = BASELINE_DIV_YIELD_MAP['BKK:BDMS'];
-            }
 
             const high52 = matched[8] ?? null;
             const low52 = matched[9] ?? null;
@@ -431,7 +428,7 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
     const monthlyCloses = Array.from(monthlyMap.values());
     const rsiMonthly = calculateWilderRSI(monthlyCloses, 14);
 
-    let dividendYield = BASELINE_DIV_YIELD_MAP[displaySymbol] ?? null;
+    let dividendYield = null;
     if (saHtml) {
       const divMatch = saHtml.match(/<td[^>]*>(?:<!--\[-?\d+-->)?(?:<a[^>]*>)?Dividend(?:<\/a>)?(?:<!--\]-->)?<\/td>\s*<td[^>]*>(?:<!--\[-?\d+-->)?([^<]+)/i);
       if (divMatch && divMatch[1]) {
@@ -460,7 +457,11 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
       }
     }
 
-    let pe = BASELINE_PE_MAP[displaySymbol] ?? null;
+    if (dividendYield === null && assetType !== 'CRYPTOCURRENCY') {
+      dividendYield = BASELINE_DIV_YIELD_MAP[displaySymbol] ?? null;
+    }
+
+    let pe = null;
     if (saHtml) {
       const peMatch = saHtml.match(/PE Ratio(?: \([^)]+\))?<\/td>\s*<td[^>]*>([0-9\.]+)/i);
       if (peMatch && peMatch[1]) {
@@ -469,6 +470,10 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
           pe = parsed;
         }
       }
+    }
+
+    if (pe === null) {
+      pe = BASELINE_PE_MAP[displaySymbol] ?? null;
     }
 
     let marketCap = null;
@@ -526,6 +531,18 @@ async function fetchSingleAsset(symbol, shouldFetchSA = true) {
 }
 
 export async function handleQuote(request) {
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': '*',
+        'Access-Control-Max-Age': '86400'
+      }
+    });
+  }
+
   const url = new URL(request.url);
   const symbolsParam = url.searchParams.get('symbols') || url.searchParams.get('symbol') || '';
 
@@ -541,43 +558,47 @@ export async function handleQuote(request) {
     ];
   }
 
-  // 1. Parallel fetch from Yahoo Finance chart v8 (real-time live prices & Wilder RSI)
-  // and TradingView Scanner batch (market cap & P/E fundamentals).
-  // Fetching Yahoo chart without StockAnalysis HTML ensures 1 lightweight subrequest per asset (< 50 Cloudflare limit).
-  const [yahooResults, tvMap] = await Promise.all([
-    Promise.allSettled(symbolList.map(sym => fetchSingleAsset(sym, false))),
-    fetchTradingViewBatch(symbolList).catch(err => {
-      console.warn('TradingView batch fetch encountered error:', err);
-      return new Map();
-    })
-  ]);
+  // 1. Primary Feed: Instant zero-delay live quotes and indicators from TradingView Scanner API
+  let tvMap = new Map();
+  try {
+    tvMap = await fetchTradingViewBatch(symbolList);
+  } catch (err) {
+    console.warn('TradingView batch fetch encountered error:', err);
+  }
 
-  const yahooMap = new Map();
-  symbolList.forEach((sym, idx) => {
-    const res = yahooResults[idx];
-    if (res.status === 'fulfilled' && res.value && res.value.price !== null) {
-      yahooMap.set(sym, res.value);
-    }
+  // 2. Fallback: Identify symbols missing from TradingView or with null price, fetch via Yahoo Finance
+  const missingSymbols = symbolList.filter(sym => {
+    const item = tvMap.get(sym);
+    return !item || item.price === null || item.price === undefined;
   });
 
-  // 2. Intelligently merge feeds:
-  // Yahoo Finance provides zero-delay real-time tick prices, change %, 52w range, volume, and accurate Wilder RSI.
-  // TradingView Scanner enriches market cap and P/E fundamentals, or serves as seamless instant fallback.
-  const results = symbolList.map(sym => {
-    const yfData = yahooMap.get(sym);
-    const tvData = tvMap.get(sym);
+  const fallbackResultsMap = new Map();
+  if (missingSymbols.length > 0) {
+    const shouldFetchSA = missingSymbols.length <= 10;
+    const fallbackResults = await Promise.all(
+      missingSymbols.map(sym => fetchSingleAsset(sym, shouldFetchSA))
+    );
+    for (let i = 0; i < missingSymbols.length; i++) {
+      fallbackResultsMap.set(missingSymbols[i], fallbackResults[i]);
+    }
+  }
 
-    if (yfData) {
+  // 3. Assemble results in original requested order
+  const results = symbolList.map(sym => {
+    const tvData = tvMap.get(sym);
+    const fbData = fallbackResultsMap.get(sym);
+
+    if (tvData && tvData.price !== null && tvData.price !== undefined) {
       return {
-        ...yfData,
-        market_cap: yfData.market_cap || tvData?.market_cap || null,
-        pe: (yfData.pe !== null && yfData.pe !== undefined) ? yfData.pe : (tvData?.pe ?? BASELINE_PE_MAP[sym] ?? null),
-        dividend_yield: (yfData.dividend_yield !== null && yfData.dividend_yield !== undefined) ? yfData.dividend_yield : (tvData?.dividend_yield ?? BASELINE_DIV_YIELD_MAP[sym] ?? null)
+        ...tvData,
+        // Fill fund/ETF holding P/E from baseline if TradingView fund P/E is null
+        pe: tvData.pe !== null ? tvData.pe : (BASELINE_PE_MAP[sym] ?? null),
+        dividend_yield: tvData.dividend_yield !== null ? tvData.dividend_yield : (BASELINE_DIV_YIELD_MAP[sym] ?? null)
       };
     }
 
-    if (tvData) {
-      return tvData;
+    if (fbData && fbData.price !== null && fbData.price !== undefined) {
+      return fbData;
     }
 
     // Ultimate fallback if both feeds fail

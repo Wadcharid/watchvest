@@ -17,6 +17,18 @@ const THAI_TOP_STOCKS = [
 ];
 
 export async function handleSearch(request) {
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': '*',
+        'Access-Control-Max-Age': '86400'
+      }
+    });
+  }
+
   const url = new URL(request.url);
   const q = (url.searchParams.get('q') || '').trim();
 

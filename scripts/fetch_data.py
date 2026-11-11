@@ -11,39 +11,39 @@ except ImportError:
     yf = None
 
 BASELINE_PE_MAP = {
-    'NVDA': 22.96,
-    'MSFT': 27.98,
-    'GOOGL': 14.75,
-    'AMZN': 21.03,
+    'NVDA': 21.35,
+    'MSFT': 27.84,
+    'GOOGL': 15.00,
+    'AMZN': 21.89,
     'SCHD': 18.34,
-    'TSM': 23.88,
+    'TSM': 25.52,
     'SPYI': 22.85,
     'VYMI': 13.12,
-    'BKK:CPALL': 13.52,
-    'BKK:BDMS': 20.44,
-    'BKK:GULF': 2.99,
-    'BKK:PTTEP': 7.72,
-    'HKG:0700': 14.28,
+    'BKK:CPALL': 13.89,
+    'BKK:BDMS': 20.75,
+    'BKK:GULF': 23.71,
+    'BKK:PTTEP': 8.00,
+    'HKG:0700': 14.50,
     'ACWI': 19.36
 }
 
 BASELINE_DIV_YIELD_MAP = {
-    'NVDA': 0.55,
-    'MSFT': 0.73,
+    'NVDA': 0.59,
+    'MSFT': 0.74,
     'GOOGL': 0.31,
     'AMZN': None,
-    'SCHD': 2.98,
+    'SCHD': 2.96,
     'BTC-USD': None,
-    'TSM': 1.15,
-    'SPYI': 12.36,
-    'VYMI': 3.67,
-    'BKK:CPALL': 3.63,
-    'BKK:BDMS': 5.08,
-    'BKK:GULF': 1.72,
-    'IAUI': 14.18,
-    'HKG:0700': 1.26,
-    'ACWI': 1.47,
-    'BKK:PTTEP': 6.10
+    'TSM': 0.81,
+    'SPYI': 12.08,
+    'VYMI': 3.62,
+    'BKK:CPALL': 3.49,
+    'BKK:BDMS': 3.75,
+    'BKK:GULF': 1.66,
+    'IAUI': 13.76,
+    'HKG:0700': 1.27,
+    'ACWI': 1.44,
+    'BKK:PTTEP': 6.47
 }
 
 TV_KNOWN_TICKERS = {
@@ -244,6 +244,7 @@ def fetch_tradingview_batch(symbols: list[str]) -> dict[str, dict]:
                         raw_type = matched_d[13]
                         high_52 = matched_d[8]
                         low_52 = matched_d[9]
+                        update_ts = matched_d[14] if len(matched_d) > 14 and matched_d[14] else None
 
                         q_type = map_tv_type(raw_type, sym)
                         display_sym, _, direct_sa = resolve_ticker(sym)
@@ -259,9 +260,7 @@ def fetch_tradingview_batch(symbols: list[str]) -> dict[str, dict]:
                         elif sym in BASELINE_DIV_YIELD_MAP:
                             final_div = BASELINE_DIV_YIELD_MAP[sym]
 
-                        # Special case for BDMS where baseline accounts for combined regular+special dividend
-                        if sym == 'BKK:BDMS' and BASELINE_DIV_YIELD_MAP.get('BKK:BDMS'):
-                            final_div = BASELINE_DIV_YIELD_MAP['BKK:BDMS']
+                        market_time_str = get_thai_datetime_str(datetime.fromtimestamp(update_ts, timezone.utc)) if update_ts else None
 
                         parsed_results[sym] = {
                             "symbol": display_sym,
@@ -278,6 +277,8 @@ def fetch_tradingview_batch(symbols: list[str]) -> dict[str, dict]:
                             "rsi_monthly": round(float(rsi_m), 2) if rsi_m is not None and not pd.isna(rsi_m) else None,
                             "high_52w": round(float(high_52), 2) if high_52 is not None and not pd.isna(high_52) else None,
                             "low_52w": round(float(low_52), 2) if low_52 is not None and not pd.isna(low_52) else None,
+                            "market_time": market_time_str,
+                            "market_time_unix": update_ts,
                             "stockanalysis_url": sa_url,
                             "last_updated": get_thai_datetime_str()
                         }
@@ -569,10 +570,17 @@ def main():
         display_sym, _, sa_url = resolve_ticker(symbol)
         tv_item = tv_results.get(raw_sym)
 
-        # 1. Primary: Direct Yahoo Finance live chart for zero-delay real-time prices & Wilder RSI
-        yf_item = fetch_symbol_yahoo_direct(symbol)
+        # 1. Primary: Instant zero-delay TradingView scanner result
+        if tv_item and tv_item.get("price") is not None:
+            if tv_item.get("pe") is None:
+                tv_item["pe"] = BASELINE_PE_MAP.get(display_sym)
+            if tv_item.get("dividend_yield") is None and display_sym not in ['BTC-USD', 'BTC', 'ETH-USD', 'ETH']:
+                tv_item["dividend_yield"] = BASELINE_DIV_YIELD_MAP.get(display_sym)
+            results.append(tv_item)
+            continue
 
-        # 2. If direct Yahoo chart failed, try yfinance fallback
+        # 2. Fallback: Direct Yahoo Finance live chart
+        yf_item = fetch_symbol_yahoo_direct(symbol)
         if yf_item is None:
             try:
                 yf_item = fetch_symbol_data_fallback(symbol)
@@ -581,20 +589,9 @@ def main():
                 yf_item = None
 
         if yf_item and yf_item.get("price") is not None:
-            # Merge TradingView's market_cap and pe if available
-            if tv_item:
-                if not yf_item.get("market_cap") and tv_item.get("market_cap"):
-                    yf_item["market_cap"] = tv_item["market_cap"]
-                if yf_item.get("pe") is None and tv_item.get("pe") is not None:
-                    yf_item["pe"] = tv_item["pe"]
-                if yf_item.get("dividend_yield") is None and tv_item.get("dividend_yield") is not None:
-                    yf_item["dividend_yield"] = tv_item["dividend_yield"]
             results.append(yf_item)
-        elif tv_item and tv_item.get("price") is not None:
-            # Fall back to TradingView if Yahoo was unavailable
-            results.append(tv_item)
         else:
-            # Ultimate fallback
+            # 3. Ultimate fallback
             results.append({
                 "symbol": display_sym,
                 "name": display_sym,

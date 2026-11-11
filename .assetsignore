@@ -4,5 +4,6 @@ scripts/**
 src/**
 rea-main/**
 rea-main.zip
+functions/**
 wrangler.json
 .assetsignore

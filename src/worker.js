@@ -7,6 +7,18 @@ import { handleSearch } from './api/search.js';
 
 export default {
   async fetch(request, env, ctx) {
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': '*',
+          'Access-Control-Max-Age': '86400'
+        }
+      });
+    }
+
     const url = new URL(request.url);
 
     // API Routes

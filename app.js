@@ -320,11 +320,12 @@ function duplicateCurrentWatchlist() {
    Data Fetching Engine (Cloudflare Edge Function + Fallback)
    ========================================================================== */
 function getApiEndpoint(path) {
-  const isCloudflare = window.location.hostname.includes('pages.dev') ||
-    window.location.hostname.includes('workers.dev');
-  // If running on GitHub Pages, localhost, or file://, use Cloudflare Pages Edge backend
-  const base = isCloudflare ? '' : 'https://watchvest.pages.dev';
-  return `${base}${path}`;
+  // If running on GitHub Pages (wadcharid.github.io), use Cloudflare Pages Edge backend
+  if (window.location.hostname.endsWith('github.io')) {
+    return `https://watchvest.pages.dev${path}`;
+  }
+  // If running natively on Cloudflare (Pages *.pages.dev, Workers *.workers.dev, or custom domain), or locally
+  return path;
 }
 
 let autoRefreshTimer = null;
@@ -632,7 +633,8 @@ function renderTableBody(items) {
       </div>
     `;
 
-    const priceHtml = `<span class="price-val">${formatPrice(asset.price, asset.currency)}</span>`;
+    const priceTitle = asset.market_time ? `เวลาซื้อขายล่าสุดในตลาด: ${asset.market_time}` : '';
+    const priceHtml = `<span class="price-val" title="${escapeHtml(priceTitle)}">${formatPrice(asset.price, asset.currency)}</span>`;
     const changeHtml = formatChange(asset.change_pct);
     const deleteBtn = `<button class="btn-row-action" onclick="removeSymbolFromCurrentList('${asset.symbol}')" title="ลบออกจาก Watchlist">&times;</button>`;
 
