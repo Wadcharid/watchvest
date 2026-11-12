@@ -907,8 +907,8 @@ function sortItems(items) {
       valA = a.name || a.symbol || '';
       valB = b.name || b.symbol || '';
     } else if (column === 'symbol') {
-      valA = (a.symbol || '').replace(/^(BKK:|HKG:)/i, '');
-      valB = (b.symbol || '').replace(/^(BKK:|HKG:)/i, '');
+      valA = a.symbol || '';
+      valB = b.symbol || '';
     } else {
       valA = a[column];
       valB = b[column];
